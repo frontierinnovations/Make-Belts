@@ -206,6 +206,13 @@ export interface TangentPoints {
   /** Arc start/end angles on driven pulley (radians) */
   drivenArcStart: number;
   drivenArcEnd: number;
+  /**
+   * Canvas arc direction flags.
+   * true  = anticlockwise in canvas coords (= clockwise in math, Y-down)
+   * false = clockwise in canvas coords (= counterclockwise in math, Y-down)
+   */
+  driverArcAnticlockwise: boolean;
+  drivenArcAnticlockwise: boolean;
 }
 
 export interface BeltWarning {
@@ -451,38 +458,54 @@ export function computeCenterDistanceFromBeltLength(
 
 /**
  * Compute tangent points for drawing the belt.
- * Returns the four tangent points where the belt leaves/meets each pulley.
+ *
+ * OPEN BELT — external tangent of two circles:
+ *   The line connecting centers makes angle θ = atan2(dy, dx).
+ *   The tangent offset angle from the center line is:
+ *     α = asin((r2 − r1) / C)   (positive when r2 > r1)
+ *
+ *   On the DRIVER (circle 1, left):
+ *     upper tangent point: angle = θ + π/2 + α   (belt leaves going "up-right")
+ *     lower tangent point: angle = θ − π/2 − α   (belt leaves going "down-right")
+ *
+ *   On the DRIVEN (circle 2, right):
+ *     upper tangent point: angle = θ + π/2 + α   (belt arrives from "up-left")
+ *     lower tangent point: angle = θ − π/2 − α   (belt arrives from "down-left")
+ *
+ *   The belt wraps around the BACK of each pulley (the side away from the other pulley):
+ *     Driver arc: from upper-tangent-angle going CW (anticlockwise in math, clockwise visually
+ *                 in canvas Y-down) around the back to lower-tangent-angle.
+ *     Driven arc: from upper-tangent-angle going CCW (clockwise in canvas) around the front
+ *                 to lower-tangent-angle.
+ *
+ * CROSSED BELT — internal tangent:
+ *   α = asin((r1 + r2) / C)
+ *   Driver upper: θ + π/2 − α
+ *   Driver lower: θ − π/2 + α
+ *   Driven upper: θ + π/2 + α  (flipped)
+ *   Driven lower: θ − π/2 − α
  */
 function computeTangentPoints(
   x1: number, y1: number, r1: number,
   x2: number, y2: number, r2: number,
   config: BeltConfig,
   centerAngle: number,
-  alpha: number
+  alpha: number  // already computed by caller; sign convention: always ≥ 0
 ): TangentPoints {
   if (config === "open") {
-    // For open belt:
-    // The belt tangent lines are offset perpendicular to the center line
-    // Upper tangent: offset by r1 (and r2) perpendicular to center line, adjusted by alpha
-    // Tangent angle from center line = π/2 - alpha (for outer tangent of two circles with different radii)
-    
-    // The tangent point angle on driver (circle 1):
-    // Upper tangent leaves driver at angle: centerAngle + (π/2 - alpha) from driver center
-    // But we need to account for the sign convention
-    
-    // For open belt, the tangent lines are:
-    // Upper: angle from driver = centerAngle - (π/2 - alpha) [going "above" the center line]
-    // Lower: angle from driver = centerAngle + (π/2 - alpha) [going "below" the center line]
-    
-    // Driver pulley tangent angles
-    const driverUpperAngle = centerAngle - (Math.PI / 2 - alpha);
-    const driverLowerAngle = centerAngle + (Math.PI / 2 - alpha);
-    
-    // Driven pulley tangent angles (same direction offset)
-    const drivenUpperAngle = centerAngle - (Math.PI / 2 - alpha);
-    const drivenLowerAngle = centerAngle + (Math.PI / 2 - alpha);
-    
-    // Tangent points
+    // alpha = asin(|r2 - r1| / C), but we need signed alpha:
+    // positive when r2 > r1 (driven larger), negative when r1 > r2
+    const signedAlpha = r2 >= r1 ? alpha : -alpha;
+
+    // Tangent point angles on each pulley
+    // Upper span: belt runs from driver (upper) to driven (upper)
+    const driverUpperAngle = centerAngle + Math.PI / 2 + signedAlpha;
+    const drivenUpperAngle = centerAngle + Math.PI / 2 + signedAlpha;
+
+    // Lower span: belt runs from driven (lower) back to driver (lower)
+    const driverLowerAngle = centerAngle - Math.PI / 2 - signedAlpha;
+    const drivenLowerAngle = centerAngle - Math.PI / 2 - signedAlpha;
+
     const upperStart = {
       x: x1 + r1 * Math.cos(driverUpperAngle),
       y: y1 + r1 * Math.sin(driverUpperAngle),
@@ -499,33 +522,60 @@ function computeTangentPoints(
       x: x1 + r1 * Math.cos(driverLowerAngle),
       y: y1 + r1 * Math.sin(driverLowerAngle),
     };
-    
-    // Arc angles for drawing
-    // Driver: arc from lowerAngle going CCW (in canvas coords, CW visually) to upperAngle
-    // The arc on the driver goes from the lower tangent point to the upper tangent point
-    // going around the "back" of the pulley (away from the driven pulley)
-    
+
+    // Arc angles for canvas drawing (Y-axis points DOWN in canvas):
+    //
+    // Driver arc: belt wraps around the LEFT/BACK side of the driver.
+    //   We go from the lower tangent point, around the back (increasing angle, i.e.
+    //   counterclockwise in math = clockwise visually), to the upper tangent point.
+    //   canvas arc(cx, cy, r, startAngle, endAngle, anticlockwise=false) draws CW in screen.
+    //   To go from driverLowerAngle → driverUpperAngle the short way around the back:
+    //   Use anticlockwise = true (math CCW = screen CW when Y is flipped).
+    //
+    // Driven arc: belt wraps around the RIGHT/FRONT side of the driven.
+    //   We go from the upper tangent point, around the front (decreasing angle),
+    //   to the lower tangent point.
+    //   Use anticlockwise = false (math CW = screen CCW when Y is flipped).
+    //
+    // We encode the anticlockwise flag in the TangentPoints by storing
+    // the angles in the order that canvas ctx.arc() should use them with
+    // anticlockwise = false for driven and anticlockwise = true for driver.
+    // The BeltCanvas drawBelt function must use these flags.
+
     return {
       upperStart,
       upperEnd,
       lowerStart,
       lowerEnd,
-      driverArcStart: driverLowerAngle,
-      driverArcEnd: driverUpperAngle,
+      // Driver arc: goes from upper tangent point ANTICLOCKWISE (in canvas Y-down coords)
+      // around the back of the driver to the lower tangent point.
+      // In canvas: anticlockwise=true means going in the direction of decreasing angle
+      // (which is the "back" side when driver is to the left of driven).
+      driverArcStart: driverUpperAngle,
+      driverArcEnd: driverLowerAngle,
+      driverArcAnticlockwise: true,
+      // Driven arc: goes from upper tangent point CLOCKWISE (in canvas Y-down coords)
+      // around the front of the driven to the lower tangent point.
+      // In canvas: anticlockwise=false means going in the direction of increasing angle.
       drivenArcStart: drivenUpperAngle,
       drivenArcEnd: drivenLowerAngle,
+      drivenArcAnticlockwise: false,
     };
   } else {
-    // Crossed belt
-    // For crossed belt: sin(α) = (r1 + r2) / C
-    // Upper tangent: driver at angle centerAngle - (π/2 - alpha)
-    //                driven at angle centerAngle + (π/2 - alpha) [flipped]
-    
-    const driverUpperAngle = centerAngle - (Math.PI / 2 - alpha);
-    const driverLowerAngle = centerAngle + (Math.PI / 2 - alpha);
-    const drivenUpperAngle = centerAngle + (Math.PI / 2 - alpha);
-    const drivenLowerAngle = centerAngle - (Math.PI / 2 - alpha);
-    
+    // ── Crossed belt ──────────────────────────────────────────────────────────
+    // alpha = asin((r1 + r2) / C)
+    // Internal tangent: the two spans cross between the pulleys.
+    //
+    // Driver upper: belt leaves at θ + π/2 − α
+    // Driver lower: belt leaves at θ − π/2 + α
+    // Driven upper: belt arrives at θ − π/2 + α  (same side as driver lower — they cross)
+    // Driven lower: belt arrives at θ + π/2 − α
+
+    const driverUpperAngle = centerAngle + Math.PI / 2 - alpha;
+    const driverLowerAngle = centerAngle - Math.PI / 2 + alpha;
+    const drivenUpperAngle = centerAngle - Math.PI / 2 + alpha + Math.PI; // π offset = other side
+    const drivenLowerAngle = centerAngle + Math.PI / 2 - alpha + Math.PI;
+
     const upperStart = {
       x: x1 + r1 * Math.cos(driverUpperAngle),
       y: y1 + r1 * Math.sin(driverUpperAngle),
@@ -542,16 +592,18 @@ function computeTangentPoints(
       x: x1 + r1 * Math.cos(driverLowerAngle),
       y: y1 + r1 * Math.sin(driverLowerAngle),
     };
-    
+
     return {
       upperStart,
       upperEnd,
       lowerStart,
       lowerEnd,
-      driverArcStart: driverLowerAngle,
-      driverArcEnd: driverUpperAngle,
+      driverArcStart: driverUpperAngle,
+      driverArcEnd: driverLowerAngle,
+      driverArcAnticlockwise: true,
       drivenArcStart: drivenUpperAngle,
       drivenArcEnd: drivenLowerAngle,
+      drivenArcAnticlockwise: true,
     };
   }
 }

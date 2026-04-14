@@ -17,6 +17,30 @@ import {
 } from "@/lib/beltMath";
 import { CheckCircle2, XCircle, AlertTriangle, Maximize2 } from "lucide-react";
 
+/**
+ * Compute the signed angular delta for a canvas arc.
+ * Returns a signed angle (radians) such that:
+ *   startAngle + delta = endAngle  (going in the specified direction)
+ *
+ * Canvas arc(start, end, anticlockwise):
+ *   anticlockwise=false → goes in the direction of INCREASING angle (CW on screen, Y-down)
+ *   anticlockwise=true  → goes in the direction of DECREASING angle (CCW on screen, Y-down)
+ */
+function arcAngleDelta(start: number, end: number, anticlockwise: boolean): number {
+  const TWO_PI = Math.PI * 2;
+  if (anticlockwise) {
+    // Going from start toward decreasing angle to reach end
+    let delta = start - end;
+    delta = ((delta % TWO_PI) + TWO_PI) % TWO_PI; // normalize to [0, 2π)
+    return -delta; // negative = decreasing angle
+  } else {
+    // Going from start toward increasing angle to reach end
+    let delta = end - start;
+    delta = ((delta % TWO_PI) + TWO_PI) % TWO_PI; // normalize to [0, 2π)
+    return delta; // positive = increasing angle
+  }
+}
+
 interface BeltCanvasProps {
   driver: PulleyParams;
   driven: PulleyParams;
@@ -216,13 +240,15 @@ export default function BeltCanvas({
       ctx.save();
 
       // ── Draw filled belt loop ──────────────────────────────────────────────
-      // Build closed path: upper span → driven arc → lower span → driver arc
+      // Belt path: upper span → driven arc → lower span → driver arc
+      // Each arc uses the anticlockwise flag from the geometry to ensure the belt
+      // wraps around the correct side of each pulley without clipping through it.
       ctx.beginPath();
       ctx.moveTo(uS.x, uS.y);
       ctx.lineTo(uE.x, uE.y);
-      ctx.arc(drivenPos.x, drivenPos.y, r2, tp.drivenArcStart, tp.drivenArcEnd, false);
+      ctx.arc(drivenPos.x, drivenPos.y, r2, tp.drivenArcStart, tp.drivenArcEnd, tp.drivenArcAnticlockwise);
       ctx.lineTo(lE.x, lE.y);
-      ctx.arc(driverPos.x, driverPos.y, r1, tp.driverArcStart, tp.driverArcEnd, false);
+      ctx.arc(driverPos.x, driverPos.y, r1, tp.driverArcStart, tp.driverArcEnd, tp.driverArcAnticlockwise);
       ctx.closePath();
 
       // Subtle fill for belt interior
@@ -230,13 +256,14 @@ export default function BeltCanvas({
       ctx.fill();
 
       // ── Draw belt edges as thick stroked lines ─────────────────────────────
+      ctx.strokeStyle = beltColor;
+      ctx.lineWidth = beltThicknessPx;
+      ctx.lineCap = "butt";
+
       // Upper span
       ctx.beginPath();
       ctx.moveTo(uS.x, uS.y);
       ctx.lineTo(uE.x, uE.y);
-      ctx.strokeStyle = beltColor;
-      ctx.lineWidth = beltThicknessPx;
-      ctx.lineCap = "butt";
       ctx.stroke();
 
       // Lower span
@@ -245,14 +272,14 @@ export default function BeltCanvas({
       ctx.lineTo(lE.x, lE.y);
       ctx.stroke();
 
-      // Driven arc
+      // Driven arc (wraps the front/right side of the driven pulley)
       ctx.beginPath();
-      ctx.arc(drivenPos.x, drivenPos.y, r2, tp.drivenArcStart, tp.drivenArcEnd, false);
+      ctx.arc(drivenPos.x, drivenPos.y, r2, tp.drivenArcStart, tp.drivenArcEnd, tp.drivenArcAnticlockwise);
       ctx.stroke();
 
-      // Driver arc
+      // Driver arc (wraps the back/left side of the driver pulley)
       ctx.beginPath();
-      ctx.arc(driverPos.x, driverPos.y, r1, tp.driverArcStart, tp.driverArcEnd, false);
+      ctx.arc(driverPos.x, driverPos.y, r1, tp.driverArcStart, tp.driverArcEnd, tp.driverArcAnticlockwise);
       ctx.stroke();
 
       // ── Belt highlight (top edge sheen) ────────────────────────────────────
@@ -324,6 +351,108 @@ export default function BeltCanvas({
         ctx.restore();
       }
 
+      ctx.restore();
+    },
+    [driver, driven, system, worldToScreen, scale]
+  );
+
+  /**
+   * Draw a motion marker dot that travels along the belt loop.
+   *
+   * The belt loop consists of four segments in order:
+   *   1. Upper span:  uS → uE  (straight line)
+   *   2. Driven arc:  uE → lS  (arc on driven pulley)
+   *   3. Lower span:  lS → lE  (straight line)
+   *   4. Driver arc:  lE → uS  (arc on driver pulley)
+   *
+   * beltOffset is the cumulative pixel distance the belt has moved.
+   * We compute the dot position by walking along the loop segments.
+   */
+  const drawMotionMarker = useCallback(
+    (ctx: CanvasRenderingContext2D, geo: BeltGeometry, beltOffset: number) => {
+      const tp = geo.tangentPoints;
+      const driverPos = worldToScreen(driver.centerX, driver.centerY);
+      const drivenPos = worldToScreen(driven.centerX, driven.centerY);
+      const driverGeo = computePulleyGeometry(driver, system);
+      const drivenGeo = computePulleyGeometry(driven, system);
+      const r1 = driverGeo.pitchRadius * scale;
+      const r2 = drivenGeo.pitchRadius * scale;
+
+      const uS = worldToScreen(tp.upperStart.x, tp.upperStart.y);
+      const uE = worldToScreen(tp.upperEnd.x, tp.upperEnd.y);
+      const lS = worldToScreen(tp.lowerStart.x, tp.lowerStart.y);
+      const lE = worldToScreen(tp.lowerEnd.x, tp.lowerEnd.y);
+
+      // ── Compute arc lengths for each segment ──────────────────────────────
+      const upperSpanLen = Math.sqrt((uE.x - uS.x) ** 2 + (uE.y - uS.y) ** 2);
+      const lowerSpanLen = Math.sqrt((lE.x - lS.x) ** 2 + (lE.y - lS.y) ** 2);
+
+      // Arc length = r × |angle|
+      // Driven arc: from drivenArcStart to drivenArcEnd
+      const drivenArcAngle = arcAngleDelta(
+        tp.drivenArcStart, tp.drivenArcEnd, tp.drivenArcAnticlockwise
+      );
+      const drivenArcLen = r2 * Math.abs(drivenArcAngle);
+
+      // Driver arc: from driverArcStart to driverArcEnd
+      const driverArcAngle = arcAngleDelta(
+        tp.driverArcStart, tp.driverArcEnd, tp.driverArcAnticlockwise
+      );
+      const driverArcLen = r1 * Math.abs(driverArcAngle);
+
+      const totalLen = upperSpanLen + drivenArcLen + lowerSpanLen + driverArcLen;
+      if (totalLen < 1) return;
+
+      // Wrap beltOffset into [0, totalLen)
+      const pos = ((beltOffset % totalLen) + totalLen) % totalLen;
+
+      // ── Walk along segments to find dot position ───────────────────────────
+      let dotX = 0, dotY = 0;
+
+      if (pos < upperSpanLen) {
+        // Segment 1: upper span
+        const t = pos / upperSpanLen;
+        dotX = uS.x + (uE.x - uS.x) * t;
+        dotY = uS.y + (uE.y - uS.y) * t;
+      } else if (pos < upperSpanLen + drivenArcLen) {
+        // Segment 2: driven arc
+        const arcPos = pos - upperSpanLen;
+        const arcFrac = arcPos / drivenArcLen;
+        const angle = tp.drivenArcStart + drivenArcAngle * arcFrac;
+        dotX = drivenPos.x + r2 * Math.cos(angle);
+        dotY = drivenPos.y + r2 * Math.sin(angle);
+      } else if (pos < upperSpanLen + drivenArcLen + lowerSpanLen) {
+        // Segment 3: lower span
+        const t = (pos - upperSpanLen - drivenArcLen) / lowerSpanLen;
+        dotX = lS.x + (lE.x - lS.x) * t;
+        dotY = lS.y + (lE.y - lS.y) * t;
+      } else {
+        // Segment 4: driver arc
+        const arcPos = pos - upperSpanLen - drivenArcLen - lowerSpanLen;
+        const arcFrac = arcPos / driverArcLen;
+        const angle = tp.driverArcStart + driverArcAngle * arcFrac;
+        dotX = driverPos.x + r1 * Math.cos(angle);
+        dotY = driverPos.y + r1 * Math.sin(angle);
+      }
+
+      // ── Draw the dot ───────────────────────────────────────────────────────
+      const dotR = Math.max(4, Math.min(8, scale * 2.5));
+      ctx.save();
+      // White halo
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, dotR + 2, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fill();
+      // Colored dot
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = "#ff4444";
+      ctx.fill();
+      // Inner highlight
+      ctx.beginPath();
+      ctx.arc(dotX - dotR * 0.25, dotY - dotR * 0.25, dotR * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.fill();
       ctx.restore();
     },
     [driver, driven, system, worldToScreen, scale]
@@ -477,20 +606,22 @@ export default function BeltCanvas({
       // Belt
       drawBelt(ctx, geo, beltOffset);
 
-      // Pulleys
+      // Pulleys (drawn on top of belt)
       const driverGeo = computePulleyGeometry(driver, system);
       const drivenGeo = computePulleyGeometry(driven, system);
 
-      // Compute rotations for animation
       drawPulley(ctx, driver, driver.rotationDeg, selectedPulleyId === driver.id, driverGeo);
       drawPulley(ctx, driven, driven.rotationDeg, selectedPulleyId === driven.id, drivenGeo);
+
+      // Motion marker dot (drawn on top of belt, below labels)
+      drawMotionMarker(ctx, geo, beltOffset);
 
       // Labels
       drawLabels(ctx, geo);
     },
     [
       canvasSize, system, scale, worldToScreen, driver, driven,
-      selectedPulleyId, drawBelt, drawPulley, drawLabels, drawCenterDistanceLine
+      selectedPulleyId, drawBelt, drawPulley, drawLabels, drawCenterDistanceLine, drawMotionMarker
     ]
   );
 
