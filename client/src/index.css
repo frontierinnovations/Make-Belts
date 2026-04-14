@@ -42,6 +42,9 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Belt Drive Generator — Clean Utilitarian Theme matching Make-Gears */
+/* Fonts: IBM Plex Sans (UI), IBM Plex Mono (numeric values) */
+
 :root {
   --primary: var(--color-blue-700);
   --primary-foreground: var(--color-blue-50);
@@ -119,6 +122,10 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+  code, .font-mono, input[type="text"].numeric {
+    font-family: 'IBM Plex Mono', monospace;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),

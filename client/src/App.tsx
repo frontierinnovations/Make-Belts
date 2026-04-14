@@ -29,6 +29,7 @@ function App() {
       <ThemeProvider
         defaultTheme="light"
         // switchable
+        // Clean utilitarian theme matching Make-Gears
       >
         <TooltipProvider>
           <Toaster />
