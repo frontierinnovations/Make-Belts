@@ -605,6 +605,7 @@ export default function BeltCanvas({
 
       // Belt
       drawBelt(ctx, geo, beltOffset);
+      // motion marker removed per user request
 
       // Pulleys (drawn on top of belt)
       const driverGeo = computePulleyGeometry(driver, system);
@@ -613,15 +614,12 @@ export default function BeltCanvas({
       drawPulley(ctx, driver, driver.rotationDeg, selectedPulleyId === driver.id, driverGeo);
       drawPulley(ctx, driven, driven.rotationDeg, selectedPulleyId === driven.id, drivenGeo);
 
-      // Motion marker dot (drawn on top of belt, below labels)
-      drawMotionMarker(ctx, geo, beltOffset);
-
       // Labels
       drawLabels(ctx, geo);
     },
     [
       canvasSize, system, scale, worldToScreen, driver, driven,
-      selectedPulleyId, drawBelt, drawPulley, drawLabels, drawCenterDistanceLine, drawMotionMarker
+      selectedPulleyId, drawBelt, drawPulley, drawLabels, drawCenterDistanceLine
     ]
   );
 

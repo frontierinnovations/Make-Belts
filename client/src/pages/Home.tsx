@@ -69,7 +69,7 @@ export default function Home() {
       centerX: -120,
       centerY: 0,
       color: PULLEY_COLORS[0],
-      rpm: 1450,
+      rpm: 5,
       isDriver: true,
       bore: 20,
       spokes: 5,
