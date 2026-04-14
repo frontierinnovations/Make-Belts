@@ -16,6 +16,7 @@ import {
   computePulleyGeometry,
   computeBeltGeometry,
   validateBeltSystem,
+  computeAdvancedOutputs,
   V_BELT_SECTIONS,
   TIMING_PROFILES,
   PULLEY_COLORS,
@@ -24,6 +25,17 @@ import {
   downloadSvg,
   downloadDxf,
 } from "@/lib/beltMath";
+import {
+  buildMcMasterLinks,
+  findMatchingBelts,
+  buildPulleyCatalogEntry,
+} from "@/lib/beltCatalog";
+import {
+  generatePulleyStep,
+  downloadStep,
+  generatePulleyOpenSCAD,
+  downloadOpenSCAD,
+} from "@/lib/stepExport";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,6 +59,10 @@ import {
   XCircle,
   CheckCircle2,
   Info,
+  ExternalLink,
+  ShoppingCart,
+  Box,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -231,6 +247,9 @@ export default function BeltControls({
 }: BeltControlsProps) {
   const [showDisplay, setShowDisplay] = useState(true);
   const [showResults, setShowResults] = useState(true);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [showSourcing, setShowSourcing] = useState(false);
   const [showExport, setShowExport] = useState(false);
 
   const selectedPulley = selectedPulleyId === driver.id ? driver : driven;
@@ -238,6 +257,28 @@ export default function BeltControls({
 
   const driverGeo = useMemo(() => computePulleyGeometry(driver, system), [driver, system]);
   const drivenGeo = useMemo(() => computePulleyGeometry(driven, system), [driven, system]);
+
+  // Advanced outputs
+  const advanced = useMemo(() => {
+    if (!geo) return null;
+    return computeAdvancedOutputs(driver, driven, system, geo);
+  }, [driver, driven, system, geo]);
+
+  // Catalog matches
+  const catalogMatches = useMemo(() => {
+    if (!geo) return [];
+    return findMatchingBelts(system, geo, 5);
+  }, [system, geo]);
+
+  // McMaster links
+  const mcLinks = useMemo(() => {
+    if (!geo) return null;
+    return buildMcMasterLinks(driver, driven, system, geo);
+  }, [driver, driven, system, geo]);
+
+  // Pulley catalog entries
+  const driverCatalog = useMemo(() => buildPulleyCatalogEntry(driver, system), [driver, system]);
+  const drivenCatalog = useMemo(() => buildPulleyCatalogEntry(driven, system), [driven, system]);
 
   const handleExportSvg = () => {
     if (!geo) return;
@@ -251,6 +292,30 @@ export default function BeltControls({
     const dxf = exportBeltSystemToDxf(driver, driven, system, geo);
     downloadDxf(dxf, `belt-drive-${system.beltType}.dxf`);
     toast.success("DXF exported");
+  };
+
+  const handleExportDriverStep = () => {
+    const step = generatePulleyStep(driver, system);
+    downloadStep(step, `${driver.name || "driver"}-pulley`);
+    toast.success("Driver STEP exported");
+  };
+
+  const handleExportDrivenStep = () => {
+    const step = generatePulleyStep(driven, system);
+    downloadStep(step, `${driven.name || "driven"}-pulley`);
+    toast.success("Driven STEP exported");
+  };
+
+  const handleExportDriverScad = () => {
+    const scad = generatePulleyOpenSCAD(driver, system);
+    downloadOpenSCAD(scad, `${driver.name || "driver"}-pulley`);
+    toast.success("Driver OpenSCAD exported");
+  };
+
+  const handleExportDrivenScad = () => {
+    const scad = generatePulleyOpenSCAD(driven, system);
+    downloadOpenSCAD(scad, `${driven.name || "driven"}-pulley`);
+    toast.success("Driven OpenSCAD exported");
   };
 
   const errorCount = warnings.filter((w) => w.severity === "error").length;
@@ -660,6 +725,184 @@ export default function BeltControls({
           </div>
         )}
 
+        {/* Advanced Outputs */}
+        <SectionHeader
+          title="Advanced Outputs"
+          collapsible
+          open={showAdvanced}
+          onToggle={() => setShowAdvanced((v) => !v)}
+        />
+        {showAdvanced && advanced && geo && (
+          <div className="space-y-0.5">
+            {/* Strength & Capacity */}
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-1 pb-0.5">Strength &amp; Capacity</div>
+            <ReadOnlyField label="Max power" value={`${(advanced.maxPower / 1000).toFixed(2)} kW`} />
+            <ReadOnlyField label="Safety factor" value={`${advanced.safetyFactor.toFixed(2)}×`} />
+            <ReadOnlyField label="Max driver τ" value={`${advanced.maxDriverTorque.toFixed(2)} N·m`} />
+            <ReadOnlyField label="Max driven τ" value={`${advanced.maxDrivenTorque.toFixed(2)} N·m`} />
+            <ReadOnlyField label="Tight stress" value={`${advanced.tightSideStress.toFixed(2)} MPa`} />
+            {/* Center Distance */}
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-0.5">Center Distance Range</div>
+            <ReadOnlyField label="C min" value={`${advanced.centerDistanceMin.toFixed(1)} mm`} />
+            <ReadOnlyField label="C max" value={`${advanced.centerDistanceMax.toFixed(1)} mm`} />
+            {/* Tensioning */}
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-0.5">Tensioning Guide</div>
+            <ReadOnlyField label="Belt sag" value={`${advanced.beltSag.toFixed(2)} mm`} />
+            <ReadOnlyField label="Deflection" value={`${advanced.recommendedDeflection.toFixed(1)} mm`} />
+            <ReadOnlyField label="Defl. force min" value={`${advanced.deflectionForceMin.toFixed(1)} N`} />
+            <ReadOnlyField label="Defl. force max" value={`${advanced.deflectionForceMax.toFixed(1)} N`} />
+            {/* Life & Performance */}
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-0.5">Life &amp; Performance</div>
+            <ReadOnlyField label="Fatigue life" value={advanced.fatigueLifeHours > 50000 ? ">50,000 hr" : `${advanced.fatigueLifeHours.toFixed(0)} hr`} />
+            <ReadOnlyField label="Belt passes/hr" value={`${advanced.beltPassesPerHour.toFixed(0)}`} />
+            <ReadOnlyField label="Specific power" value={`${advanced.specificPower.toFixed(1)} W/mm`} />
+            <ReadOnlyField label="Driver v_s" value={`${advanced.driverSurfaceSpeed.toFixed(2)} m/s`} />
+            <ReadOnlyField label="Driven v_s" value={`${advanced.drivenSurfaceSpeed.toFixed(2)} m/s`} />
+            {/* Safety factor color bar */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                <span>Safety factor: {advanced.safetyFactor.toFixed(2)}×</span>
+                <span className={`font-semibold ${
+                  advanced.safetyFactor >= 2 ? "text-green-600" :
+                  advanced.safetyFactor >= 1.2 ? "text-amber-600" : "text-red-600"
+                }`}>
+                  {advanced.safetyFactor >= 2 ? "SAFE" : advanced.safetyFactor >= 1.2 ? "MARGINAL" : "OVERLOADED"}
+                </span>
+              </div>
+              <div className="h-2 rounded bg-gray-100 overflow-hidden">
+                <div
+                  className={`h-full rounded transition-all ${
+                    advanced.safetyFactor >= 2 ? "bg-green-500" :
+                    advanced.safetyFactor >= 1.2 ? "bg-amber-500" : "bg-red-500"
+                  }`}
+                  style={{ width: `${Math.min(100, (advanced.safetyFactor / 3) * 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+        {showAdvanced && !advanced && (
+          <p className="text-xs text-gray-400 py-1">No data — configure the belt system first.</p>
+        )}
+
+        {/* Belt Catalog */}
+        <SectionHeader
+          title="Belt Catalog"
+          collapsible
+          open={showCatalog}
+          onToggle={() => setShowCatalog((v) => !v)}
+        />
+        {showCatalog && (
+          <div className="space-y-1 pt-1">
+            {catalogMatches.length > 0 ? (
+              <>
+                <p className="text-[10px] text-gray-400 pb-1">Closest standard belts to computed length ({geo ? geo.actualBeltLength.toFixed(0) : "—"} mm):</p>
+                {catalogMatches.map((entry, i) => (
+                  <div
+                    key={i}
+                    className={`rounded border px-2 py-1.5 text-xs ${
+                      i === 0
+                        ? "bg-blue-50 border-blue-200 text-blue-800"
+                        : "bg-gray-50 border-gray-200 text-gray-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-semibold">{entry.partNumber}</span>
+                      <span className="text-[10px] text-gray-500">{entry.delta < 1 ? "exact" : `±${entry.delta.toFixed(0)} mm`}</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">{entry.nominalLength.toFixed(0)} mm pitch length</div>
+                    <a
+                      href={entry.mcmasterUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-[10px] text-blue-500 hover:underline mt-0.5"
+                    >
+                      <ShoppingCart size={9} /> McMaster-Carr
+                      <ExternalLink size={8} />
+                    </a>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <p className="text-xs text-gray-400 py-1">No catalog data for this belt type.</p>
+            )}
+          </div>
+        )}
+
+        {/* Sourcing */}
+        <SectionHeader
+          title="Sourcing"
+          collapsible
+          open={showSourcing}
+          onToggle={() => setShowSourcing((v) => !v)}
+        />
+        {showSourcing && mcLinks && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[10px] text-gray-400">McMaster-Carr filtered search links for your drive configuration:</p>
+
+            {/* Driver pulley */}
+            <div className="rounded border border-gray-200 bg-gray-50 px-2 py-2">
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                <Box size={9} /> Driver Pulley
+              </div>
+              <p className="text-xs text-gray-700 mb-1">{mcLinks.driverPulleyDesc}</p>
+              <a
+                href={mcLinks.driverPulley}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-blue-600 hover:underline font-medium"
+              >
+                <ShoppingCart size={11} /> Search McMaster-Carr
+                <ExternalLink size={10} />
+              </a>
+            </div>
+
+            {/* Driven pulley */}
+            <div className="rounded border border-gray-200 bg-gray-50 px-2 py-2">
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                <Box size={9} /> Driven Pulley
+              </div>
+              <p className="text-xs text-gray-700 mb-1">{mcLinks.drivenPulleyDesc}</p>
+              <a
+                href={mcLinks.drivenPulley}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-blue-600 hover:underline font-medium"
+              >
+                <ShoppingCart size={11} /> Search McMaster-Carr
+                <ExternalLink size={10} />
+              </a>
+            </div>
+
+            {/* Belt */}
+            <div className="rounded border border-gray-200 bg-gray-50 px-2 py-2">
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                <Zap size={9} /> Belt
+              </div>
+              <p className="text-xs text-gray-700 mb-1">{mcLinks.beltDesc}</p>
+              <a
+                href={mcLinks.belt}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-blue-600 hover:underline font-medium"
+              >
+                <ShoppingCart size={11} /> Search McMaster-Carr
+                <ExternalLink size={10} />
+              </a>
+            </div>
+
+            {/* Pulley specs */}
+            <div className="text-[10px] text-gray-400 pt-1 space-y-0.5">
+              <p><span className="font-semibold">Driver:</span> {driverCatalog.pitchDiameter}, bore {driverCatalog.bore}</p>
+              <p><span className="font-semibold">Driven:</span> {drivenCatalog.pitchDiameter}, bore {drivenCatalog.bore}</p>
+              {driverCatalog.notes && <p className="text-gray-300">{driverCatalog.notes}</p>}
+            </div>
+          </div>
+        )}
+        {showSourcing && !mcLinks && (
+          <p className="text-xs text-gray-400 py-1">Configure the belt system to see sourcing links.</p>
+        )}
+
         {/* Display Options */}
         <SectionHeader
           title="Display"
@@ -714,20 +957,59 @@ export default function BeltControls({
         />
         {showExport && (
           <div className="flex flex-col gap-2 pt-1">
+            {/* 2D Exports */}
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">2D Drawing</div>
             <button
               onClick={handleExportSvg}
               className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded text-sm text-gray-700 transition-colors"
             >
               <Download size={13} />
-              Export SVG
+              Export SVG (full drive)
             </button>
             <button
               onClick={handleExportDxf}
               className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded text-sm text-gray-700 transition-colors"
             >
               <Download size={13} />
-              Export DXF
+              Export DXF (full drive)
             </button>
+
+            {/* 3D Exports */}
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-1">3D Pulley Models</div>
+            <div className="text-[10px] text-gray-400 -mt-1">STEP (AP203) for CAD import; OpenSCAD for parametric editing &amp; STL export</div>
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                onClick={handleExportDriverStep}
+                className="flex items-center gap-1.5 px-2 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded text-xs text-gray-700 transition-colors"
+              >
+                <Download size={11} />
+                Driver .STP
+              </button>
+              <button
+                onClick={handleExportDrivenStep}
+                className="flex items-center gap-1.5 px-2 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded text-xs text-gray-700 transition-colors"
+              >
+                <Download size={11} />
+                Driven .STP
+              </button>
+              <button
+                onClick={handleExportDriverScad}
+                className="flex items-center gap-1.5 px-2 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded text-xs text-gray-700 transition-colors"
+              >
+                <Download size={11} />
+                Driver .SCAD
+              </button>
+              <button
+                onClick={handleExportDrivenScad}
+                className="flex items-center gap-1.5 px-2 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded text-xs text-gray-700 transition-colors"
+              >
+                <Download size={11} />
+                Driven .SCAD
+              </button>
+            </div>
+            <div className="text-[10px] text-gray-400 bg-blue-50 border border-blue-100 rounded px-2 py-1.5">
+              <span className="font-semibold text-blue-600">Tip:</span> Open .SCAD in OpenSCAD → Export → STL/STEP for full solid geometry. The STEP file contains surface definitions and key dimensions.
+            </div>
           </div>
         )}
 

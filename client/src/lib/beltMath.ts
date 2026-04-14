@@ -729,6 +729,176 @@ export function validateBeltSystem(
   return warnings;
 }
 
+// ─── Advanced Engineering Outputs ───────────────────────────────────────────
+
+export interface AdvancedOutputs {
+  /** Maximum transmittable torque on driver shaft (N·m) — limited by slip */
+  maxDriverTorque: number;
+  /** Maximum transmittable torque on driven shaft (N·m) */
+  maxDrivenTorque: number;
+  /** Maximum transmittable power (W) at current belt speed */
+  maxPower: number;
+  /** Safety factor = maxPower / inputPower */
+  safetyFactor: number;
+  /** Minimum recommended center distance (mm) = 0.7 × (d1 + d2) */
+  centerDistanceMin: number;
+  /** Maximum recommended center distance (mm) = 2 × (d1 + d2) */
+  centerDistanceMax: number;
+  /** Belt sag (mm) — static deflection of slack side under gravity */
+  beltSag: number;
+  /** Recommended static deflection for tensioning (mm) — typically span/64 */
+  recommendedDeflection: number;
+  /** Recommended deflection force range [min, max] (N) */
+  deflectionForceMin: number;
+  deflectionForceMax: number;
+  /** Fatigue life estimate (hours) — simplified Goodman approach */
+  fatigueLifeHours: number;
+  /** Belt stress on tight side (MPa) — for flat/V-belt */
+  tightSideStress: number;
+  /** Number of belt passes per hour */
+  beltPassesPerHour: number;
+  /** Specific power (W per mm of belt width) */
+  specificPower: number;
+  /** Pulley surface speed (m/s) — driver */
+  driverSurfaceSpeed: number;
+  /** Pulley surface speed (m/s) — driven */
+  drivenSurfaceSpeed: number;
+}
+
+/**
+ * Compute advanced engineering outputs beyond the basic geometry.
+ * Based on Shigley's Ch.17, ISO 22, and standard belt manufacturer data.
+ */
+export function computeAdvancedOutputs(
+  driver: PulleyParams,
+  driven: PulleyParams,
+  system: BeltSystemParams,
+  geo: BeltGeometry
+): AdvancedOutputs {
+  const driverGeo = computePulleyGeometry(driver, system);
+  const drivenGeo = computePulleyGeometry(driven, system);
+  const r1 = driverGeo.pitchRadius / 1000; // m
+  const r2 = drivenGeo.pitchRadius / 1000; // m
+
+  // Effective friction coefficient (accounts for V-belt wedging)
+  const muEff = effectiveFrictionCoeff(
+    system.frictionCoeff,
+    system.beltType,
+    system.vbeltSection
+  );
+  const limitingWrap = Math.min(geo.wrapAngleSmall, geo.wrapAngleLarge);
+  const eulerRatio = Math.exp(muEff * limitingWrap);
+
+  // Maximum transmittable effective tension at current belt speed
+  // F_e_max = (F_tight_max - Fc) × (1 - 1/e^(μφ))
+  // We work backwards from the maximum allowable tight-side tension.
+  // For V-belts, use manufacturer rated tension; approximate here as:
+  //   F_tight_max = (belt cross-section area × allowable stress) × numBelts
+  // Allowable stress for rubber V-belt: ~7 MPa; for flat belt: ~3 MPa
+  const beltWidth = system.beltWidth / 1000; // m
+  let beltArea: number; // m²
+  let allowableStress: number; // Pa
+
+  if (system.beltType === "vbelt") {
+    const sec = V_BELT_SECTIONS[system.vbeltSection];
+    // Approximate trapezoidal cross-section area
+    beltArea = ((sec.topWidth + (sec.topWidth - 2 * sec.height * Math.tan(20 * Math.PI / 180))) / 2)
+      * sec.height * 1e-6; // m²
+    allowableStress = 7e6; // Pa
+  } else if (system.beltType === "flat") {
+    beltArea = beltWidth * (system.flatBeltThickness / 1000);
+    allowableStress = 3e6; // Pa
+  } else if (system.beltType === "timing") {
+    // Timing belts: limited by tooth shear strength; approximate
+    const profile = TIMING_PROFILES[system.timingProfile];
+    beltArea = beltWidth * (profile.toothHeight / 1000);
+    allowableStress = 10e6; // Pa (polyurethane)
+  } else {
+    // Round belt
+    beltArea = Math.PI * (beltWidth / 2) ** 2;
+    allowableStress = 5e6;
+  }
+
+  const maxTightSideTension = allowableStress * beltArea * system.numBelts;
+  const centrifugalForce = geo.centrifugalForce;
+  const maxEffectiveTension = (maxTightSideTension - centrifugalForce) * (1 - 1 / eulerRatio);
+  const maxPower = Math.max(0, maxEffectiveTension * geo.beltSpeed);
+
+  const omega1 = (2 * Math.PI * driver.rpm) / 60;
+  const omega2 = (2 * Math.PI * geo.outputRpm) / 60;
+  const maxDriverTorque = omega1 > 0 ? maxPower / omega1 : 0;
+  const maxDrivenTorque = omega2 > 0 ? maxPower * geo.efficiency / omega2 : 0;
+
+  const safetyFactor = system.inputPower > 0 ? maxPower / system.inputPower : 0;
+
+  // Center distance limits
+  const d1 = driverGeo.pitchDiameter;
+  const d2 = drivenGeo.pitchDiameter;
+  const centerDistanceMin = 0.7 * (d1 + d2);
+  const centerDistanceMax = 2.0 * (d1 + d2);
+
+  // Belt sag: static deflection of slack side
+  // sag = (m' × g × L²) / (8 × F_slack)  where L = span length (m)
+  const upperSpanLength = Math.sqrt(
+    (driven.centerX - driver.centerX) ** 2 + (driven.centerY - driver.centerY) ** 2
+  ) / 1000; // m (approximate — use center distance for horizontal layout)
+  const g = 9.81;
+  const beltSag = geo.slackSideTension > 0
+    ? (system.beltMassPerMeter * g * upperSpanLength ** 2) / (8 * geo.slackSideTension) * 1000 // mm
+    : 0;
+
+  // Recommended deflection for tensioning (Shigley's: span/64)
+  const spanMm = upperSpanLength * 1000;
+  const recommendedDeflection = spanMm / 64;
+
+  // Deflection force range (N) — based on initial tension ± 20%
+  const deflectionForceMin = geo.initialTension * 0.8;
+  const deflectionForceMax = geo.initialTension * 1.2;
+
+  // Fatigue life estimate (simplified)
+  // Number of load cycles per hour = (belt passes per hour) × (number of pulleys)
+  // Belt passes per hour = beltSpeed (m/s) × 3600 / beltLength (m)
+  const beltLengthM = geo.actualBeltLength / 1000;
+  const beltPassesPerHour = beltLengthM > 0
+    ? (geo.beltSpeed * 3600) / beltLengthM
+    : 0;
+
+  // Simplified Goodman fatigue: life ∝ (allowableStress / tightSideStress)^k
+  // k ≈ 8 for rubber belts (Shigley's)
+  const tightSideStress = beltArea > 0 ? geo.tightSideTension / beltArea / 1e6 : 0; // MPa
+  const allowableMPa = allowableStress / 1e6;
+  const stressRatio = tightSideStress > 0 ? allowableMPa / tightSideStress : 10;
+  const fatigueExponent = system.beltType === "timing" ? 10 : 8;
+  // Base life at rated stress ≈ 20,000 hours for rubber belts
+  const fatigueLifeHours = Math.min(100000, 20000 * Math.pow(stressRatio, fatigueExponent));
+
+  // Specific power
+  const specificPower = system.beltWidth > 0 ? system.inputPower / system.beltWidth : 0;
+
+  // Surface speeds
+  const driverSurfaceSpeed = (Math.PI * driverGeo.pitchDiameter * driver.rpm) / (60 * 1000);
+  const drivenSurfaceSpeed = (Math.PI * drivenGeo.pitchDiameter * geo.outputRpm) / (60 * 1000);
+
+  return {
+    maxDriverTorque,
+    maxDrivenTorque,
+    maxPower,
+    safetyFactor,
+    centerDistanceMin,
+    centerDistanceMax,
+    beltSag,
+    recommendedDeflection,
+    deflectionForceMin,
+    deflectionForceMax,
+    fatigueLifeHours,
+    tightSideStress,
+    beltPassesPerHour,
+    specificPower,
+    driverSurfaceSpeed,
+    drivenSurfaceSpeed,
+  };
+}
+
 // ─── Default Factories ────────────────────────────────────────────────────────
 
 export function createDefaultPulley(id: string, overrides: Partial<PulleyParams> = {}): PulleyParams {
