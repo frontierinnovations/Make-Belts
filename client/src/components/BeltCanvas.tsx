@@ -296,21 +296,89 @@ export default function BeltCanvas({
         ctx.stroke();
       }
 
-      // ── V-belt groove indicator ────────────────────────────────────────────
-      if (system.beltType === "vbelt" && beltThicknessPx > 6) {
-        // Draw a center line on the belt spans
-        ctx.strokeStyle = beltColor + "88";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([6, 4]);
-        ctx.beginPath();
-        ctx.moveTo(uS.x, uS.y);
-        ctx.lineTo(uE.x, uE.y);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(lS.x, lS.y);
-        ctx.lineTo(lE.x, lE.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
+      // ── Motion stripes (V-belt, flat, round) ─────────────────────────────
+      // Draw evenly-spaced cross-marks on the belt spans that scroll with beltOffset
+      // to give a clear visual sense of belt motion.
+      if (system.beltType !== "timing") {
+        const stripePitch = Math.max(12, beltThicknessPx * 2.5); // spacing between stripes
+        const stripeLen = beltThicknessPx * 0.7;                 // half-length of each stripe
+        ctx.save();
+        ctx.strokeStyle = beltColor === "#2a2a2a" ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.22)";
+        ctx.lineWidth = 1.2;
+        ctx.lineCap = "round";
+
+        // Helper: draw scrolling stripes along a straight span
+        const drawSpanStripes = (
+          x1: number, y1: number, x2: number, y2: number
+        ) => {
+          const sdx = x2 - x1, sdy = y2 - y1;
+          const slen = Math.sqrt(sdx * sdx + sdy * sdy);
+          if (slen < 1) return;
+          const tx = sdx / slen, ty = sdy / slen; // tangent
+          const nx = -ty, ny = tx;                // normal (perpendicular)
+          // Offset so stripes scroll: first stripe at -(beltOffset % stripePitch)
+          const startOff = (beltOffset % stripePitch + stripePitch) % stripePitch;
+          for (let d = -startOff; d < slen + stripePitch; d += stripePitch) {
+            if (d < -stripePitch || d > slen + stripePitch) continue;
+            const cx = x1 + tx * d, cy = y1 + ty * d;
+            ctx.beginPath();
+            ctx.moveTo(cx - nx * stripeLen, cy - ny * stripeLen);
+            ctx.lineTo(cx + nx * stripeLen, cy + ny * stripeLen);
+            ctx.stroke();
+          }
+        };
+
+        // Helper: draw scrolling stripes along an arc
+        const drawArcStripes = (
+          cx: number, cy: number, r: number,
+          startAngle: number, endAngle: number, anticlockwise: boolean,
+          arcLen: number
+        ) => {
+          if (arcLen < 1) return;
+          const startOff = (beltOffset % stripePitch + stripePitch) % stripePitch;
+          // Compute angular step per stripe
+          const angPerPx = 1 / r; // radians per pixel of arc
+          const angStep = stripePitch * angPerPx;
+          // Walk from startAngle in the arc direction
+          const sign = anticlockwise ? -1 : 1;
+          const totalAng = Math.abs(arcAngleDelta(startAngle, endAngle, anticlockwise));
+          const startAngOff = (startOff / arcLen) * totalAng;
+          for (let a = startAngOff; a < totalAng + angStep; a += angStep) {
+            if (a > totalAng) break;
+            const ang = startAngle + sign * a;
+            const px = cx + Math.cos(ang) * r;
+            const py = cy + Math.sin(ang) * r;
+            // Radial direction (outward from center)
+            const rx = Math.cos(ang), ry = Math.sin(ang);
+            ctx.beginPath();
+            ctx.moveTo(px - rx * stripeLen, py - ry * stripeLen);
+            ctx.lineTo(px + rx * stripeLen, py + ry * stripeLen);
+            ctx.stroke();
+          }
+        };
+
+        // Compute arc lengths for offset continuity
+        const driverArcLen = Math.abs(arcAngleDelta(tp.driverArcStart, tp.driverArcEnd, tp.driverArcAnticlockwise)) * r1;
+        const drivenArcLen = Math.abs(arcAngleDelta(tp.drivenArcStart, tp.drivenArcEnd, tp.drivenArcAnticlockwise)) * r2;
+
+        // Upper span
+        drawSpanStripes(uS.x, uS.y, uE.x, uE.y);
+        // Driven arc — offset by upper span length
+        const upperSpanLen = Math.sqrt((uE.x-uS.x)**2 + (uE.y-uS.y)**2);
+        const beltOffDrivenArc = beltOffset + upperSpanLen;
+        drawArcStripes(drivenPos.x, drivenPos.y, r2, tp.drivenArcStart, tp.drivenArcEnd, tp.drivenArcAnticlockwise, drivenArcLen);
+        // Lower span — offset by upper span + driven arc
+        const lowerSpanLen = Math.sqrt((lE.x-lS.x)**2 + (lE.y-lS.y)**2);
+        const beltOffLowerSpan = beltOffDrivenArc + drivenArcLen;
+        drawSpanStripes(lS.x, lS.y, lE.x, lE.y);
+        // Driver arc — offset by upper span + driven arc + lower span
+        const beltOffDriverArc = beltOffLowerSpan + lowerSpanLen;
+        drawArcStripes(driverPos.x, driverPos.y, r1, tp.driverArcStart, tp.driverArcEnd, tp.driverArcAnticlockwise, driverArcLen);
+
+        // suppress unused variable warnings
+        void beltOffDrivenArc; void beltOffLowerSpan; void beltOffDriverArc;
+
+        ctx.restore();
       }
 
       // ── Timing belt teeth ──────────────────────────────────────────────────
