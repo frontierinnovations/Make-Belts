@@ -409,6 +409,26 @@ export default function BeltControls({
           </div>
         )}
 
+        {/* Belt Cross-Section */}
+        <div className="pt-2">
+          <BeltCrossSection
+            beltType={system.beltType}
+            vbeltSection={system.vbeltSection}
+            timingProfile={system.timingProfile}
+            flatThickness={system.flatBeltThickness}
+            beltWidth={system.beltWidth}
+          />
+        </div>
+
+        {/* Belt Wizard */}
+        <BeltWizard
+          currentPowerW={system.inputPower}
+          currentRpm={driver.rpm}
+          currentRatio={geo ? geo.speedRatio : 1}
+          currentCenterMm={geo ? geo.centerDistance : 240}
+          onApply={onApplyWizard}
+        />
+
         {/* Belt Type */}
         <SectionHeader title="Belt System" />
 
@@ -1167,26 +1187,6 @@ export default function BeltControls({
             </div>
           </div>
         )}
-
-        {/* Belt Cross-Section */}
-        <div className="pt-2">
-          <BeltCrossSection
-            beltType={system.beltType}
-            vbeltSection={system.vbeltSection}
-            timingProfile={system.timingProfile}
-            flatThickness={system.flatBeltThickness}
-            beltWidth={system.beltWidth}
-          />
-        </div>
-
-        {/* Belt Wizard */}
-        <BeltWizard
-          currentPowerW={system.inputPower}
-          currentRpm={driver.rpm}
-          currentRatio={geo ? geo.speedRatio : 1}
-          currentCenterMm={geo ? geo.centerDistance : 240}
-          onApply={onApplyWizard}
-        />
 
         {/* About */}
         <SectionHeader title="About" />
