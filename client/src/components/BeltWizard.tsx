@@ -7,7 +7,7 @@
  *
  * Style: Clean utilitarian matching Make-Gears / BeltControls.
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   type BeltType,
   type VBeltSection,
@@ -242,6 +242,16 @@ export default function BeltWizard({
   const [service, setService] = useState<"light" | "medium" | "heavy">("medium");
   const [showAll, setShowAll] = useState(false);
 
+  // Auto-sync inputs from current configuration whenever the wizard is opened
+  useEffect(() => {
+    if (open) {
+      setPowerW(currentPowerW);
+      setRpm(currentRpm);
+      setRatio(currentRatio);
+      setCenterMm(currentCenterMm);
+    }
+  }, [open, currentPowerW, currentRpm, currentRatio, currentCenterMm]);
+
   const recommendations = useMemo(
     () => runBeltWizard(powerW, rpm, ratio, centerMm, service),
     [powerW, rpm, ratio, centerMm, service]
@@ -332,19 +342,6 @@ export default function BeltWizard({
                : "Ks=1.6 — Heavy compressors, crushers, hoists, reversing drives"}
             </p>
           </div>
-
-          {/* Sync from current */}
-          <button
-            onClick={() => {
-              setPowerW(currentPowerW);
-              setRpm(currentRpm);
-              setRatio(currentRatio);
-              setCenterMm(currentCenterMm);
-            }}
-            className="w-full text-[10px] text-blue-600 hover:text-blue-800 py-0.5 border border-blue-200 rounded hover:bg-blue-50 transition-colors"
-          >
-            ↺ Sync from current configuration
-          </button>
 
           {/* Results */}
           <div className="space-y-1.5">
