@@ -580,10 +580,10 @@ function computeTangentPoints(
       lowerEnd,
       driverArcStart: driverUpperAngle,
       driverArcEnd: driverLowerAngle,
-      driverArcAnticlockwise: false,   // CW on screen (increasing angle, through 180°) = wraps back/left of driver
+      driverArcAnticlockwise: false,   // increasing angle from +104° to -104° through 180° = wraps back/left of driver ✓
       drivenArcStart: drivenUpperAngle,
       drivenArcEnd: drivenLowerAngle,
-      drivenArcAnticlockwise: false,   // CW on screen (increasing angle, through 180°) = wraps front/left of driven (facing driver)
+      drivenArcAnticlockwise: true,    // decreasing angle from +104° to -104° through 0° = wraps right/outer side of driven ✓
     };
   } else {
     // ── Crossed belt ──────────────────────────────────────────────────────────
