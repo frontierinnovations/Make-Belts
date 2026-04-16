@@ -13,6 +13,9 @@ import BeltControls from "@/components/BeltControls";
 import {
   type PulleyParams,
   type BeltSystemParams,
+  type BeltType,
+  type VBeltSection,
+  type TimingProfile,
   computeBeltGeometry,
   validateBeltSystem,
   createDefaultPulley,
@@ -139,6 +142,17 @@ export default function Home() {
     setSystem((s) => ({ ...s }));
   }, []);
 
+  const handleApplyWizard = useCallback((beltType: BeltType, section?: VBeltSection, timingProfile?: TimingProfile, numBelts?: number) => {
+    setSystem((s) => ({
+      ...s,
+      beltType,
+      ...(section ? { vbeltSection: section } : {}),
+      ...(timingProfile ? { timingProfile } : {}),
+      ...(numBelts ? { numBelts } : {}),
+    }));
+    toast.success(`Applied: ${beltType === "vbelt" ? `V-Belt ${section}` : beltType === "timing" ? `${timingProfile} Timing` : beltType} × ${numBelts ?? 1}`);
+  }, []);
+
   const handleShareConfig = useCallback(() => {
     pushConfigToUrl(driver, driven, system);
     const url = window.location.href;
@@ -193,6 +207,7 @@ export default function Home() {
           onToggleAnimation={handleToggleAnimation}
           onResetView={handleResetView}
           onShareConfig={handleShareConfig}
+          onApplyWizard={handleApplyWizard}
           warnings={warnings}
           geo={geo}
         />

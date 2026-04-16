@@ -70,6 +70,9 @@ import {
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
+import BeltWizard from "@/components/BeltWizard";
+import BeltCrossSection from "@/components/BeltCrossSection";
+import { type BeltType } from "@/lib/beltMath";
 
 // ─── NumericField ─────────────────────────────────────────────────────────────
 
@@ -226,6 +229,7 @@ interface BeltControlsProps {
   onUpdateDriver: (updates: Partial<PulleyParams>) => void;
   onUpdateDriven: (updates: Partial<PulleyParams>) => void;
   onUpdateSystem: (updates: Partial<BeltSystemParams>) => void;
+  onApplyWizard: (beltType: BeltType, section?: VBeltSection, timingProfile?: TimingProfile, numBelts?: number) => void;
   animating: boolean;
   onToggleAnimation: () => void;
   onResetView: () => void;
@@ -243,6 +247,7 @@ export default function BeltControls({
   onUpdateDriver,
   onUpdateDriven,
   onUpdateSystem,
+  onApplyWizard,
   animating,
   onToggleAnimation,
   onResetView,
@@ -1162,6 +1167,26 @@ export default function BeltControls({
             </div>
           </div>
         )}
+
+        {/* Belt Cross-Section */}
+        <div className="pt-2">
+          <BeltCrossSection
+            beltType={system.beltType}
+            vbeltSection={system.vbeltSection}
+            timingProfile={system.timingProfile}
+            flatThickness={system.flatBeltThickness}
+            beltWidth={system.beltWidth}
+          />
+        </div>
+
+        {/* Belt Wizard */}
+        <BeltWizard
+          currentPowerW={system.inputPower}
+          currentRpm={driver.rpm}
+          currentRatio={geo ? geo.speedRatio : 1}
+          currentCenterMm={geo ? geo.centerDistance : 240}
+          onApply={onApplyWizard}
+        />
 
         {/* About */}
         <SectionHeader title="About" />

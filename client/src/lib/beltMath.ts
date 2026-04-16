@@ -542,24 +542,48 @@ function computeTangentPoints(
     // anticlockwise = false for driven and anticlockwise = true for driver.
     // The BeltCanvas drawBelt function must use these flags.
 
+    // ── Arc direction reasoning (canvas Y-axis points DOWN) ──────────────────
+    //
+    // Canvas ctx.arc(cx, cy, r, start, end, anticlockwise):
+    //   anticlockwise=false → sweeps in the direction of INCREASING angle
+    //                         visually this is CLOCKWISE on screen (Y-down)
+    //   anticlockwise=true  → sweeps in the direction of DECREASING angle
+    //                         visually this is COUNTER-CLOCKWISE on screen (Y-down)
+    //
+    // For an open belt with driver on the LEFT and driven on the RIGHT:
+    //
+    //   Driver (left pulley): belt wraps around the LEFT/BACK side.
+    //     Upper tangent leaves at ~top-left, lower tangent leaves at ~bottom-left.
+    //     Going from lowerTangent → upperTangent around the back means going
+    //     COUNTER-CLOCKWISE on screen (decreasing angle in Y-down coords).
+    //     BUT we store arc as (upperTangent → lowerTangent), so we go CLOCKWISE
+    //     on screen = anticlockwise=false.
+    //
+    //   Driven (right pulley): belt wraps around the RIGHT/FRONT side.
+    //     Upper tangent arrives at ~top-right, lower tangent arrives at ~bottom-right.
+    //     Going from upperTangent → lowerTangent around the front means going
+    //     CLOCKWISE on screen (increasing angle in Y-down coords) = anticlockwise=false.
+    //     Wait — the front of the driven is the side FACING the driver (left side).
+    //     From upperTangent (top-right of driven) to lowerTangent (bottom-right of driven)
+    //     going around the right/outer side is COUNTER-CLOCKWISE on screen = anticlockwise=true.
+    //
+    // Summary for open belt:
+    //   Driver arc: start=driverUpperAngle, end=driverLowerAngle, anticlockwise=false
+    //     (CW on screen = wraps the back/left side of driver)
+    //   Driven arc: start=drivenUpperAngle, end=drivenLowerAngle, anticlockwise=true
+    //     (CCW on screen = wraps the front/right side of driven)
+
     return {
       upperStart,
       upperEnd,
       lowerStart,
       lowerEnd,
-      // Driver arc: goes from upper tangent point ANTICLOCKWISE (in canvas Y-down coords)
-      // around the back of the driver to the lower tangent point.
-      // In canvas: anticlockwise=true means going in the direction of decreasing angle
-      // (which is the "back" side when driver is to the left of driven).
       driverArcStart: driverUpperAngle,
       driverArcEnd: driverLowerAngle,
-      driverArcAnticlockwise: true,
-      // Driven arc: goes from upper tangent point CLOCKWISE (in canvas Y-down coords)
-      // around the front of the driven to the lower tangent point.
-      // In canvas: anticlockwise=false means going in the direction of increasing angle.
+      driverArcAnticlockwise: false,   // CW on screen (increasing angle, through 180°) = wraps back/left of driver
       drivenArcStart: drivenUpperAngle,
       drivenArcEnd: drivenLowerAngle,
-      drivenArcAnticlockwise: false,
+      drivenArcAnticlockwise: false,   // CW on screen (increasing angle, through 180°) = wraps front/left of driven (facing driver)
     };
   } else {
     // ── Crossed belt ──────────────────────────────────────────────────────────
