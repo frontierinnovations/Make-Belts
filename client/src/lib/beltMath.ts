@@ -763,6 +763,12 @@ export interface AdvancedOutputs {
   driverSurfaceSpeed: number;
   /** Pulley surface speed (m/s) — driven */
   drivenSurfaceSpeed: number;
+  /** Maximum recommended belt speed (m/s) for the selected belt type */
+  maxBeltSpeed: number;
+  /** RPM at which belt reaches max speed on driver pulley */
+  maxDriverRpm: number;
+  /** RPM at which belt reaches max speed on driven pulley */
+  maxDrivenRpm: number;
 }
 
 /**
@@ -879,6 +885,38 @@ export function computeAdvancedOutputs(
   const driverSurfaceSpeed = (Math.PI * driverGeo.pitchDiameter * driver.rpm) / (60 * 1000);
   const drivenSurfaceSpeed = (Math.PI * drivenGeo.pitchDiameter * geo.outputRpm) / (60 * 1000);
 
+  // Maximum recommended belt speed by belt type (m/s)
+  // Sources: Shigley's Ch.17, Gates/Bando engineering data
+  let maxBeltSpeed: number;
+  if (system.beltType === "vbelt") {
+    // V-belts: typically 5–30 m/s, max ~35 m/s for high-speed sections (SPZ/SPA)
+    const highSpeedSections = ["SPZ", "SPA", "SPB", "SPC"];
+    maxBeltSpeed = highSpeedSections.includes(system.vbeltSection) ? 42 : 30;
+  } else if (system.beltType === "flat") {
+    // Flat belts: up to 50 m/s for industrial, 100 m/s for high-speed
+    maxBeltSpeed = 50;
+  } else if (system.beltType === "timing") {
+    // Timing belts: varies by pitch; smaller pitch = higher speed
+    const profile = TIMING_PROFILES[system.timingProfile];
+    if (profile.pitch <= 2) maxBeltSpeed = 50;       // GT2: up to 50 m/s
+    else if (profile.pitch <= 3) maxBeltSpeed = 40;  // GT3/HTD3M
+    else if (profile.pitch <= 5) maxBeltSpeed = 30;  // HTD5M/GT5/T5/AT5
+    else if (profile.pitch <= 8) maxBeltSpeed = 25;  // HTD8M
+    else maxBeltSpeed = 20;                           // HTD14M/T10/AT10
+  } else {
+    // Round belt: typically up to 25 m/s
+    maxBeltSpeed = 25;
+  }
+
+  // RPM limits corresponding to max belt speed
+  // v = π × d × n / 60000  →  n = v × 60000 / (π × d)
+  const maxDriverRpm = driverGeo.pitchDiameter > 0
+    ? (maxBeltSpeed * 60000) / (Math.PI * driverGeo.pitchDiameter)
+    : 0;
+  const maxDrivenRpm = drivenGeo.pitchDiameter > 0
+    ? (maxBeltSpeed * 60000) / (Math.PI * drivenGeo.pitchDiameter)
+    : 0;
+
   return {
     maxDriverTorque,
     maxDrivenTorque,
@@ -896,6 +934,9 @@ export function computeAdvancedOutputs(
     specificPower,
     driverSurfaceSpeed,
     drivenSurfaceSpeed,
+    maxBeltSpeed,
+    maxDriverRpm,
+    maxDrivenRpm,
   };
 }
 

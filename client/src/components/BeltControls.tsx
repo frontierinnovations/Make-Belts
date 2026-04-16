@@ -734,6 +734,25 @@ export default function BeltControls({
         />
         {showAdvanced && advanced && geo && (
           <div className="space-y-0.5">
+            {/* Key limits summary — prominently shown */}
+            <div className="grid grid-cols-2 gap-1 pt-1 pb-2">
+              <div className="rounded border border-blue-100 bg-blue-50 px-2 py-1.5 text-center">
+                <div className="text-[10px] text-blue-500 font-semibold uppercase tracking-wide">Max Torque (driver)</div>
+                <div className="text-sm font-bold text-blue-800 mt-0.5">{advanced.maxDriverTorque.toFixed(2)} <span className="text-xs font-normal">N·m</span></div>
+              </div>
+              <div className="rounded border border-orange-100 bg-orange-50 px-2 py-1.5 text-center">
+                <div className="text-[10px] text-orange-500 font-semibold uppercase tracking-wide">Max Torque (driven)</div>
+                <div className="text-sm font-bold text-orange-800 mt-0.5">{advanced.maxDrivenTorque.toFixed(2)} <span className="text-xs font-normal">N·m</span></div>
+              </div>
+              <div className="rounded border border-green-100 bg-green-50 px-2 py-1.5 text-center">
+                <div className="text-[10px] text-green-600 font-semibold uppercase tracking-wide">Max Belt Speed</div>
+                <div className="text-sm font-bold text-green-800 mt-0.5">{advanced.maxBeltSpeed.toFixed(0)} <span className="text-xs font-normal">m/s</span></div>
+              </div>
+              <div className="rounded border border-purple-100 bg-purple-50 px-2 py-1.5 text-center">
+                <div className="text-[10px] text-purple-500 font-semibold uppercase tracking-wide">Max Power</div>
+                <div className="text-sm font-bold text-purple-800 mt-0.5">{(advanced.maxPower / 1000).toFixed(2)} <span className="text-xs font-normal">kW</span></div>
+              </div>
+            </div>
             {/* Strength & Capacity */}
             <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-1 pb-0.5">Strength &amp; Capacity</div>
             <ReadOnlyField label="Max power" value={`${(advanced.maxPower / 1000).toFixed(2)} kW`} />
@@ -758,6 +777,32 @@ export default function BeltControls({
             <ReadOnlyField label="Specific power" value={`${advanced.specificPower.toFixed(1)} W/mm`} />
             <ReadOnlyField label="Driver v_s" value={`${advanced.driverSurfaceSpeed.toFixed(2)} m/s`} />
             <ReadOnlyField label="Driven v_s" value={`${advanced.drivenSurfaceSpeed.toFixed(2)} m/s`} />
+            {/* Max speed limits */}
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-0.5">Speed Limits</div>
+            <ReadOnlyField label="Max belt speed" value={`${advanced.maxBeltSpeed.toFixed(0)} m/s`} />
+            <ReadOnlyField label="Max driver RPM" value={`${advanced.maxDriverRpm.toFixed(0)} RPM`} />
+            <ReadOnlyField label="Max driven RPM" value={`${advanced.maxDrivenRpm.toFixed(0)} RPM`} />
+            {/* Belt speed utilisation bar */}
+            <div className="pt-1">
+              <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                <span>Belt speed utilisation</span>
+                <span className={`font-semibold ${
+                  geo.beltSpeed / advanced.maxBeltSpeed >= 0.9 ? "text-red-600" :
+                  geo.beltSpeed / advanced.maxBeltSpeed >= 0.7 ? "text-amber-600" : "text-green-600"
+                }`}>
+                  {((geo.beltSpeed / advanced.maxBeltSpeed) * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-2 rounded bg-gray-100 overflow-hidden">
+                <div
+                  className={`h-full rounded transition-all ${
+                    geo.beltSpeed / advanced.maxBeltSpeed >= 0.9 ? "bg-red-500" :
+                    geo.beltSpeed / advanced.maxBeltSpeed >= 0.7 ? "bg-amber-500" : "bg-green-500"
+                  }`}
+                  style={{ width: `${Math.min(100, (geo.beltSpeed / advanced.maxBeltSpeed) * 100)}%` }}
+                />
+              </div>
+            </div>
             {/* Safety factor color bar */}
             <div className="pt-2">
               <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
