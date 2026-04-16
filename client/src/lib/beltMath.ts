@@ -662,13 +662,35 @@ export function validateBeltSystem(
     });
   }
 
-  // Belt speed check
-  const maxSpeed = system.beltType === "timing" ? 80 : system.beltType === "flat" ? 50 : 30;
+  // Belt speed check — per-type max speed (matches computeAdvancedOutputs)
+  let maxSpeed: number;
+  if (system.beltType === "vbelt") {
+    const highSpeedSections = ["SPZ", "SPA", "SPB", "SPC"];
+    maxSpeed = highSpeedSections.includes(system.vbeltSection) ? 42 : 30;
+  } else if (system.beltType === "flat") {
+    maxSpeed = 50;
+  } else if (system.beltType === "timing") {
+    const profile = TIMING_PROFILES[system.timingProfile];
+    if (profile.pitch <= 2) maxSpeed = 50;
+    else if (profile.pitch <= 3) maxSpeed = 40;
+    else if (profile.pitch <= 5) maxSpeed = 30;
+    else if (profile.pitch <= 8) maxSpeed = 25;
+    else maxSpeed = 20;
+  } else {
+    maxSpeed = 25;
+  }
+
   if (geo.beltSpeed > maxSpeed) {
+    warnings.push({
+      severity: "error",
+      code: "BELT_SPEED_EXCEEDED",
+      message: `Belt speed (${geo.beltSpeed.toFixed(1)} m/s) exceeds the maximum recommended speed of ${maxSpeed} m/s for this belt type. Reduce RPM or pulley diameter.`,
+    });
+  } else if (geo.beltSpeed > maxSpeed * 0.9) {
     warnings.push({
       severity: "warning",
       code: "BELT_SPEED_HIGH",
-      message: `Belt speed (${geo.beltSpeed.toFixed(1)} m/s) exceeds recommended maximum of ${maxSpeed} m/s.`,
+      message: `Belt speed (${geo.beltSpeed.toFixed(1)} m/s) is above 90% of the maximum (${maxSpeed} m/s). Operating near speed limit.`,
     });
   } else if (geo.beltSpeed < 5 && system.beltType === "vbelt") {
     warnings.push({

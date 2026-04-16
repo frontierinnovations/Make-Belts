@@ -37,6 +37,11 @@ import {
   downloadOpenSCAD,
 } from "@/lib/stepExport";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -627,18 +632,58 @@ export default function BeltControls({
           />
         )}
 
-        {/* Driver RPM */}
-        {selectedPulleyId === driver.id && (
-          <NumericField
-            label="Input RPM"
-            value={driver.rpm}
-            onChange={(v) => onUpdateDriver({ rpm: v })}
-            min={1}
-            max={50000}
-            step={10}
-            suffix="RPM"
-          />
-        )}
+        {/* Driver RPM — with max-speed tooltip */}
+        {selectedPulleyId === driver.id && (() => {
+          // Max belt speed for current belt type (m/s)
+          let maxBeltSpeedMs: number;
+          if (system.beltType === "vbelt") {
+            const highSpeedSections = ["SPZ", "SPA", "SPB", "SPC"];
+            maxBeltSpeedMs = highSpeedSections.includes(system.vbeltSection) ? 42 : 30;
+          } else if (system.beltType === "flat") {
+            maxBeltSpeedMs = 50;
+          } else if (system.beltType === "timing") {
+            const p = TIMING_PROFILES[system.timingProfile].pitch;
+            maxBeltSpeedMs = p <= 2 ? 50 : p <= 3 ? 40 : p <= 5 ? 30 : p <= 8 ? 25 : 20;
+          } else {
+            maxBeltSpeedMs = 25;
+          }
+          // n_max = v_max × 60000 / (π × d)
+          const maxRpm = driverGeo.pitchDiameter > 0
+            ? Math.round((maxBeltSpeedMs * 60000) / (Math.PI * driverGeo.pitchDiameter))
+            : null;
+          const atLimit = maxRpm !== null && driver.rpm >= maxRpm * 0.9;
+          return (
+            <div className="relative">
+              <NumericField
+                label="Input RPM"
+                value={driver.rpm}
+                onChange={(v) => onUpdateDriver({ rpm: v })}
+                min={1}
+                max={50000}
+                step={10}
+                suffix="RPM"
+              />
+              {maxRpm !== null && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className={`absolute right-0 top-0 flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded cursor-help ${
+                      atLimit ? "text-red-600 bg-red-50" : "text-gray-400 bg-transparent hover:bg-gray-50"
+                    }`}>
+                      <Zap size={9} className={atLimit ? "text-red-500" : "text-gray-300"} />
+                      <span>max {maxRpm.toLocaleString()} RPM</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-[200px] text-xs">
+                    <p className="font-semibold mb-1">Speed limit for {system.beltType === "vbelt" ? `${system.vbeltSection}-section V-belt` : system.beltType === "timing" ? `${system.timingProfile} timing belt` : `${system.beltType} belt`}</p>
+                    <p>Max belt speed: <strong>{maxBeltSpeedMs} m/s</strong></p>
+                    <p>At ø{driverGeo.pitchDiameter.toFixed(1)} mm driver, max input RPM is <strong>{maxRpm.toLocaleString()} RPM</strong>.</p>
+                    {atLimit && <p className="text-red-500 mt-1 font-medium">⚠ Current RPM is at or near the speed limit!</p>}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Driven RPM (read-only) */}
         {selectedPulleyId === driven.id && geo && (
@@ -824,6 +869,66 @@ export default function BeltControls({
                 />
               </div>
             </div>
+            {/* Torque utilisation bar — driver */}
+            {advanced.maxDriverTorque > 0 && geo && (() => {
+              const driverTorque = geo.driverTorque;
+              const torqueUtil = driverTorque / advanced.maxDriverTorque;
+              return (
+                <div className="pt-2">
+                  <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                    <span>Driver torque utilisation</span>
+                    <span className={`font-semibold ${
+                      torqueUtil >= 0.9 ? "text-red-600" :
+                      torqueUtil >= 0.7 ? "text-amber-600" : "text-green-600"
+                    }`}>
+                      {(torqueUtil * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-2 rounded bg-gray-100 overflow-hidden">
+                    <div
+                      className={`h-full rounded transition-all ${
+                        torqueUtil >= 0.9 ? "bg-red-500" :
+                        torqueUtil >= 0.7 ? "bg-amber-500" : "bg-blue-500"
+                      }`}
+                      style={{ width: `${Math.min(100, torqueUtil * 100)}%` }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">
+                    {driverTorque.toFixed(2)} N·m of {advanced.maxDriverTorque.toFixed(2)} N·m max
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Torque utilisation bar — driven */}
+            {advanced.maxDrivenTorque > 0 && geo && (() => {
+              const drivenTorque = geo.drivenTorque;
+              const torqueUtil = drivenTorque / advanced.maxDrivenTorque;
+              return (
+                <div className="pt-1">
+                  <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                    <span>Driven torque utilisation</span>
+                    <span className={`font-semibold ${
+                      torqueUtil >= 0.9 ? "text-red-600" :
+                      torqueUtil >= 0.7 ? "text-amber-600" : "text-green-600"
+                    }`}>
+                      {(torqueUtil * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-2 rounded bg-gray-100 overflow-hidden">
+                    <div
+                      className={`h-full rounded transition-all ${
+                        torqueUtil >= 0.9 ? "bg-red-500" :
+                        torqueUtil >= 0.7 ? "bg-amber-500" : "bg-orange-400"
+                      }`}
+                      style={{ width: `${Math.min(100, torqueUtil * 100)}%` }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">
+                    {drivenTorque.toFixed(2)} N·m of {advanced.maxDrivenTorque.toFixed(2)} N·m max
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
         {showAdvanced && !advanced && (
