@@ -184,6 +184,7 @@ function buildVBeltProfile(p: PulleyParams, geo: PulleyGeometry): ProfilePoint[]
   const bossR = p.bossDiameter / 2;
   const spec = V_BELT_GROOVES[p.vbeltSection];
   const topW = spec.topWidth / 2;
+  const openWeb = p.webStyle === "spokes";
 
   const pts: ProfilePoint[] = [];
 
@@ -202,16 +203,32 @@ function buildVBeltProfile(p: PulleyParams, geo: PulleyGeometry): ProfilePoint[]
   // Web inner radius (where web meets rim)
   const webOuterR = Math.max(hubR + 5, rd - 2);
 
-  pts.push(
-    { r: boreR, z: 0 },
-    { r: hubR, z: 0 },
-    { r: hubR, z: (fw - webT) / 2 },
-    { r: webOuterR, z: (fw - webT) / 2 },
-    ...rimPts,
-    { r: webOuterR, z: (fw + webT) / 2 },
-    { r: hubR, z: (fw + webT) / 2 },
-    { r: hubR, z: fw },
-  );
+  if (openWeb) {
+    // Open web: hub cylinder + rim ring only — no solid disk between them.
+    // Left face: bore → hub (flat, no step)
+    // Web edges: hub steps out at web start/end, rim connects at web edges
+    pts.push(
+      { r: boreR, z: 0 },
+      // Left face is flat — bore goes directly to web edge
+      { r: hubR, z: (fw - webT) / 2 },
+      { r: webOuterR, z: (fw - webT) / 2 },
+      ...rimPts,
+      { r: webOuterR, z: (fw + webT) / 2 },
+      { r: hubR, z: (fw + webT) / 2 },
+    );
+  } else {
+    // Solid web: hub steps on both sides
+    pts.push(
+      { r: boreR, z: 0 },
+      { r: hubR, z: 0 },
+      { r: hubR, z: (fw - webT) / 2 },
+      { r: webOuterR, z: (fw - webT) / 2 },
+      ...rimPts,
+      { r: webOuterR, z: (fw + webT) / 2 },
+      { r: hubR, z: (fw + webT) / 2 },
+      { r: hubR, z: fw },
+    );
+  }
 
   if (bossH > 0) {
     pts.push(
@@ -235,8 +252,18 @@ function buildFlatProfile(p: PulleyParams, geo: PulleyGeometry): ProfilePoint[] 
   const bossH = p.bossHeight;
   const bossR = p.bossDiameter / 2;
   const crownR = od + p.flatCrown;
+  const openWeb = p.webStyle === "spokes";
 
-  const pts: ProfilePoint[] = [
+  const pts: ProfilePoint[] = openWeb ? [
+    // Open web: flat left face, no hub step on left
+    { r: boreR, z: 0 },
+    { r: hubR, z: (fw - webT) / 2 },
+    { r: od, z: (fw - webT) / 2 },
+    { r: crownR, z: fw / 2 },
+    { r: od, z: (fw + webT) / 2 },
+    { r: hubR, z: (fw + webT) / 2 },
+  ] : [
+    // Solid web: hub steps on both sides
     { r: boreR, z: 0 },
     { r: hubR, z: 0 },
     { r: hubR, z: (fw - webT) / 2 },
@@ -279,7 +306,19 @@ function buildOBeltProfile(p: PulleyParams, geo: PulleyGeometry): ProfilePoint[]
     });
   }
 
-  const pts: ProfilePoint[] = [
+  const openWeb = p.webStyle === "spokes";
+  const pts: ProfilePoint[] = openWeb ? [
+    // Open web: flat left face
+    { r: boreR, z: 0 },
+    { r: hubR, z: (fw - webT) / 2 },
+    { r: od, z: (fw - webT) / 2 },
+    { r: od, z: zc - gr },
+    ...groovePts,
+    { r: od, z: zc + gr },
+    { r: od, z: (fw + webT) / 2 },
+    { r: hubR, z: (fw + webT) / 2 },
+  ] : [
+    // Solid web: hub steps on both sides
     { r: boreR, z: 0 },
     { r: hubR, z: 0 },
     { r: hubR, z: (fw - webT) / 2 },
@@ -309,8 +348,17 @@ function buildTimingProfile(p: PulleyParams, geo: PulleyGeometry): ProfilePoint[
   const webT = geo.webThickness;
   const bossH = p.bossHeight;
   const bossR = p.bossDiameter / 2;
+  const openWeb = p.webStyle === "spokes";
 
-  const pts: ProfilePoint[] = [
+  const pts: ProfilePoint[] = openWeb ? [
+    // Open web: flat left face
+    { r: boreR, z: 0 },
+    { r: hubR, z: (fw - webT) / 2 },
+    { r: rd, z: (fw - webT) / 2 },
+    { r: rd, z: (fw + webT) / 2 },
+    { r: hubR, z: (fw + webT) / 2 },
+  ] : [
+    // Solid web: hub steps on both sides
     { r: boreR, z: 0 },
     { r: hubR, z: 0 },
     { r: hubR, z: (fw - webT) / 2 },
@@ -680,49 +728,40 @@ export default function PulleyCanvas({ params, geometry, sectionView }: PulleyCa
     }
 
     // ── Spokes ────────────────────────────────────
-    // Strategy: render background-colored ring sectors between spokes to simulate
-    // open cutouts. The solid lathe web is overdrawn by background-colored sectors.
+    // Real geometry approach: the lathe profile already has an open web (no solid
+    // disk between hub and rim when webStyle=="spokes"). We add BoxGeometry spoke
+    // ribs using the body material. Each spoke is a box whose long axis is radial,
+    // positioned between hubR and rimR at the web centre (z=0 in world space).
     // Pulley axis = Z, web centre = z=0.
-    // RingGeometry lies in the XY plane by default (faces +Z), which is correct here.
     if (p.webStyle === "spokes" && p.numSpokes > 0) {
       const hubR = geo.hubDiameter / 2;
-      const rimR = Math.max(hubR + 8, geo.outerDiameter / 2 - geo.grooveDepth - 2);
-      const webDepth = Math.max(2, geo.webThickness);
-      const bgColor = 0x1a1a2e; // matches canvas background
-      // Angular half-width of each spoke (in radians)
-      const spokeHalfAngle = Math.atan2(p.spokeWidth / 2, (hubR + rimR) / 2);
-      const gapAngle = (Math.PI * 2 / p.numSpokes) - 2 * spokeHalfAngle;
-      if (gapAngle > 0.05) {
-        for (let i = 0; i < p.numSpokes; i++) {
-          const gapCentreAngle = (i / p.numSpokes) * Math.PI * 2 + Math.PI / p.numSpokes;
-          const startAngle = gapCentreAngle - gapAngle / 2;
-          // Front face cutout (facing +Z)
-          const frontCutGeo = new THREE.RingGeometry(hubR + 0.5, rimR - 0.5, 48, 1, startAngle, gapAngle);
-          const frontCutMat = new THREE.MeshBasicMaterial({ color: bgColor, side: THREE.FrontSide });
-          const frontCut = new THREE.Mesh(frontCutGeo, frontCutMat);
-          frontCut.position.z = webDepth / 2 + 0.1;
-          frontCut.renderOrder = 2;
-          group.add(frontCut);
-          // Back face cutout (facing -Z)
-          const backCutGeo = new THREE.RingGeometry(hubR + 0.5, rimR - 0.5, 48, 1, startAngle, gapAngle);
-          const backCutMat = new THREE.MeshBasicMaterial({ color: bgColor, side: THREE.BackSide });
-          const backCut = new THREE.Mesh(backCutGeo, backCutMat);
-          backCut.position.z = -webDepth / 2 - 0.1;
-          backCut.renderOrder = 2;
-          group.add(backCut);
-          // Side fill: a thin box at the gap centre to cover the web depth edge
-          const midR = (hubR + rimR) / 2;
-          const arcLen = midR * gapAngle;
-          const sideGeo = new THREE.BoxGeometry(arcLen * 0.9, webDepth + 0.5, 1);
-          const sideMat = new THREE.MeshBasicMaterial({ color: bgColor });
-          const sideMesh = new THREE.Mesh(sideGeo, sideMat);
-          sideMesh.position.x = Math.cos(gapCentreAngle) * midR;
-          sideMesh.position.y = Math.sin(gapCentreAngle) * midR;
-          sideMesh.position.z = 0;
-          sideMesh.rotation.z = gapCentreAngle + Math.PI / 2;
-          sideMesh.renderOrder = 2;
-          group.add(sideMesh);
-        }
+      // rimInnerR: inner surface of the rim where spokes attach.
+      // The lathe profile connects the hub to the rim at webOuterR = max(hubR+5, rootR-2).
+      // Use rootDiameter/2 - 2 as the inner rim radius (same as webOuterR in profile builders).
+      const rootR = geo.rootDiameter / 2;
+      const rimInnerR = Math.max(hubR + 5, rootR - 2);
+      // Spoke runs from hub outer surface to rim inner surface
+      const spokeStart = hubR + 0.5;
+      const spokeEnd = rimInnerR - 0.5;
+      const spokeLen = Math.max(2, spokeEnd - spokeStart);
+      const spokeThick = Math.max(2, geo.webThickness); // axial thickness = web thickness
+      const spokeMat = new THREE.MeshStandardMaterial({
+        color: bodyMat.color,
+        metalness: bodyMat.metalness,
+        roughness: bodyMat.roughness,
+      });
+      for (let i = 0; i < p.numSpokes; i++) {
+        const angle = (i / p.numSpokes) * Math.PI * 2;
+        // BoxGeometry: width=spokeLen (radial), height=spokeWidth (tangential), depth=spokeThick (axial)
+        const spokeGeo = new THREE.BoxGeometry(spokeLen, p.spokeWidth, spokeThick);
+        const spokeMesh = new THREE.Mesh(spokeGeo, spokeMat);
+        // Centre of spoke is at midpoint between hub surface and rim inner surface
+        const midR = spokeStart + spokeLen / 2;
+        spokeMesh.position.x = Math.cos(angle) * midR;
+        spokeMesh.position.y = Math.sin(angle) * midR;
+        spokeMesh.position.z = 0; // web centre in world space
+        spokeMesh.rotation.z = angle; // rotate so length axis points radially
+        group.add(spokeMesh);
       }
     }
 

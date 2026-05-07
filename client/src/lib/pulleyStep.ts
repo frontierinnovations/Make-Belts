@@ -92,11 +92,11 @@ function buildLatheProfile(p: PulleyParams, geo: PulleyGeometry): Point2D[] {
       grooveProfiles.push({ r: od, z: fw });
     }
 
-    // Full profile: bore → hub → web → rim (with grooves) → web → hub → bore+boss
+    // Full profile: bore → web → rim (with grooves) → web → hub → boss
+    // Left face is FLAT (no hub step on left side per standard pulley convention)
     pts.push(
-      // Left face
+      // Left face: bore directly to web edge (flat face)
       { r: boreR, z: 0 },
-      { r: hubR, z: 0 },
       // Web left
       { r: hubR, z: (fw - webT) / 2 },
       { r: od - depth - 2, z: (fw - webT) / 2 },
@@ -105,7 +105,7 @@ function buildLatheProfile(p: PulleyParams, geo: PulleyGeometry): Point2D[] {
       // Web right
       { r: od - depth - 2, z: (fw + webT) / 2 },
       { r: hubR, z: (fw + webT) / 2 },
-      // Right face + boss
+      // Right face + boss (hub only extends on boss side)
       { r: hubR, z: fw },
       { r: bossR, z: fw },
       { r: bossR, z: fw + bossH },
@@ -115,9 +115,9 @@ function buildLatheProfile(p: PulleyParams, geo: PulleyGeometry): Point2D[] {
 
   } else if (p.grooveType === "flat") {
     const crownR = od + p.flatCrown;
+    // Left face is flat (no hub step on left side)
     pts.push(
       { r: boreR, z: 0 },
-      { r: hubR, z: 0 },
       { r: hubR, z: (fw - webT) / 2 },
       { r: od, z: (fw - webT) / 2 },
       { r: crownR, z: fw / 2 },
@@ -135,9 +135,9 @@ function buildLatheProfile(p: PulleyParams, geo: PulleyGeometry): Point2D[] {
     const gr = spec.grooveRadius;
     const gd = spec.grooveDepth;
     const zCenter = fw / 2;
+    // Left face is flat (no hub step on left side)
     pts.push(
       { r: boreR, z: 0 },
-      { r: hubR, z: 0 },
       { r: hubR, z: (fw - webT) / 2 },
       { r: od, z: (fw - webT) / 2 },
       { r: od, z: zCenter - gr },
@@ -154,10 +154,9 @@ function buildLatheProfile(p: PulleyParams, geo: PulleyGeometry): Point2D[] {
 
   } else {
     // timing — simplified as rectangular tooth profile
-    const spec = TIMING_GROOVES[p.timingProfile];
+    // Left face is flat (no hub step on left side)
     pts.push(
       { r: boreR, z: 0 },
-      { r: hubR, z: 0 },
       { r: hubR, z: (fw - webT) / 2 },
       { r: rd, z: (fw - webT) / 2 },
       { r: rd, z: (fw + webT) / 2 },
@@ -455,15 +454,18 @@ export function exportPulleyOpenSCAD(p: PulleyParams, geo: PulleyGeometry): stri
 
   // Web lightening
   if (p.webStyle === "spokes") {
+    // rimInnerR: inner edge of rim where spokes attach
+    const rimInnerR = (geo.rootDiameter / 2) - 2;
     lines.push(`  // Spokes (${p.numSpokes} spokes, width=${p.spokeWidth}mm)`);
     lines.push(`  for (i=[0:${p.numSpokes - 1}])`);
     lines.push(`    rotate([0,0,i*(360/${p.numSpokes})])`);
     lines.push(`      translate([0,0,(face_w-web_t)/2])`);
     lines.push(`        hull() {`);
     lines.push(`          translate([hub_r+1,0,0]) cylinder(h=web_t, r=${(p.spokeWidth / 2).toFixed(3)});`);
-    lines.push(`          translate([outer_r-groove_depth-2,0,0]) cylinder(h=web_t, r=${(p.spokeWidth / 2).toFixed(3)});`);
+    lines.push(`          translate([${rimInnerR.toFixed(3)},0,0]) cylinder(h=web_t, r=${(p.spokeWidth / 2).toFixed(3)});`);
     lines.push(`        }`);
     lines.push(`  // (Subtract spoke voids from web — already handled by spoke union above)`);
+    lines.push(`  // NOTE: For open-web spokes, use the spoke union approach above and subtract the web disk.`);
   } else if (p.webStyle === "lightening") {
     const pcd = geo.lighteningHolePCD / 2;
     lines.push(`  // Lightening holes (${p.numLighteningHoles} × ⌀${p.lighteningHoleDiameter}mm on PCD=${geo.lighteningHolePCD.toFixed(1)}mm)`);
