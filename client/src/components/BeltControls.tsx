@@ -5,6 +5,7 @@
  * NumericField with +/- buttons, section headers, collapsible groups.
  */
 import { useState, useMemo } from "react";
+import { Link } from "wouter";
 import { useRepeatButton } from "@/hooks/useRepeatButton";
 import {
   type PulleyParams,
@@ -339,6 +340,11 @@ export default function BeltControls({
           <div>
             <h1 className="text-sm font-bold text-gray-800 leading-tight">Make Belts</h1>
             <p className="text-[10px] text-gray-400 mt-0.5">Parametric Belt Drive Generator</p>
+            <Link href="/pulleys">
+              <span className="text-[9px] text-blue-500 hover:text-blue-700 cursor-pointer underline-offset-2 hover:underline">
+                → Pulley Generator
+              </span>
+            </Link>
           </div>
           <div className="flex items-center gap-1">
             {errorCount > 0 && (
