@@ -29,7 +29,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider
-        defaultTheme="light"
+        defaultTheme="dark"
         // switchable
         // Clean utilitarian theme matching Make-Gears
       >

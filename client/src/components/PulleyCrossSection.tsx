@@ -89,12 +89,15 @@ function buildOuterProfile(p: PulleyParams, geo: PulleyGeometry): Pt[] {
     const zc = fw / 2;
     pts.push({ z: 0, r: od });
     pts.push({ z: zc - gr, r: od });
-    // Approximate semicircle with 12 points
-    for (let i = 0; i <= 12; i++) {
-      const angle = Math.PI - (i / 12) * Math.PI;
+    // Concave semicircle: arc centre at (zc, od), radius = gr.
+    // Sweep from angle=π (left: z=zc-gr, r=od) to angle=0 (right: z=zc+gr, r=od)
+    // going through angle=π/2 where sin=1 → r = od - gr (deepest point).
+    // Using -sin so the arc dips BELOW od (into the material).
+    for (let i = 0; i <= 16; i++) {
+      const angle = Math.PI - (i / 16) * Math.PI; // π → 0
       pts.push({
-        z: zc + gr * Math.cos(angle),
-        r: od - spec.grooveDepth + gr * Math.sin(angle),
+        z: zc + gr * Math.cos(angle),   // zc-gr → zc+gr
+        r: od - gr * Math.sin(angle),   // od → od-gr → od (concave dip)
       });
     }
     pts.push({ z: zc + gr, r: od });
