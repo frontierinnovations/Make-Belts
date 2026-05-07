@@ -34,9 +34,10 @@ interface Props {
   geometry: PulleyGeometry;
   width: number;
   height: number;
+  svgRef?: React.RefObject<SVGSVGElement | null>;
 }
 
-export default function PulleyFaceView({ params: p, geometry: geo, width, height }: Props) {
+export default function PulleyFaceView({ params: p, geometry: geo, width, height, svgRef }: Props) {
   const svgData = useMemo(() => {
     const od = geo.outerDiameter;
     const pd = geo.pitchDiameter;
@@ -138,6 +139,7 @@ export default function PulleyFaceView({ params: p, geometry: geo, width, height
 
   return (
     <svg
+      ref={svgRef}
       width={width}
       height={height}
       style={{ background: C.bg, display: "block" }}

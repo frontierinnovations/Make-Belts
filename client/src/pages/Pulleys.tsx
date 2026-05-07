@@ -21,7 +21,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import {
   ArrowLeft, SlidersHorizontal, X, Download,
-  FileCode2, ZoomIn, ZoomOut, Maximize2
+  FileCode2, ZoomIn, ZoomOut, Maximize2, Image
 } from "lucide-react";
 import PulleyCrossSection from "@/components/PulleyCrossSection";
 import PulleyFaceView from "@/components/PulleyFaceView";
@@ -36,6 +36,7 @@ export default function Pulleys() {
   const [zoom, setZoom] = useState(1.0);
   const [activeView, setActiveView] = useState<"section" | "face">("section");
   const canvasRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [canvasSize, setCanvasSize] = useState({ w: 700, h: 500 });
 
   const geometry = computePulleyGeometry(params);
@@ -66,6 +67,26 @@ export default function Pulleys() {
 
   const handleExportSTEP = () => downloadPulleySTEP(params, geometry);
   const handleExportSCAD = () => downloadPulleyOpenSCAD(params, geometry);
+
+  const handleExportSVG = () => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    // Clone and add XML declaration + namespace
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+    const serializer = new XMLSerializer();
+    const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(clone);
+    const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const viewLabel = activeView === "section" ? "cross-section" : "face-view";
+    const pulleyLabel = `${params.grooveType}-${Math.round(params.pitchDiameter)}mm`;
+    a.href = url;
+    a.download = `pulley-${pulleyLabel}-${viewLabel}.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#0f1117", color: "#e8e8e8" }}>
@@ -212,6 +233,23 @@ export default function Pulleys() {
               <span className="hidden sm:inline">STEP</span>
             </button>
 
+            {/* Export SVG */}
+            <button
+              onClick={handleExportSVG}
+              className="flex items-center gap-1.5 text-[10px] font-mono px-3 py-1.5 rounded border transition-all active:scale-95 touch-manipulation"
+              style={{
+                background: "transparent",
+                borderColor: "#1e2430",
+                color: "#607080",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "#2a3444"; e.currentTarget.style.color = "#a0b8c8"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e2430"; e.currentTarget.style.color = "#607080"; }}
+              title="Export current view as SVG vector file"
+            >
+              <Image size={12} />
+              <span className="hidden sm:inline">SVG</span>
+            </button>
+
             {/* Export OpenSCAD */}
             <button
               onClick={handleExportSCAD}
@@ -269,6 +307,7 @@ export default function Pulleys() {
                 geometry={geometry}
                 width={Math.max(600, canvasSize.w - 40)}
                 height={Math.max(420, canvasSize.h - 40)}
+                svgRef={svgRef}
               />
             ) : (
               <PulleyFaceView
@@ -276,6 +315,7 @@ export default function Pulleys() {
                 geometry={geometry}
                 width={Math.max(500, Math.min(canvasSize.w - 40, canvasSize.h - 80))}
                 height={Math.max(500, Math.min(canvasSize.w - 40, canvasSize.h - 80))}
+                svgRef={svgRef}
               />
             )}
           </div>

@@ -317,9 +317,10 @@ interface Props {
   geometry: PulleyGeometry;
   width?: number;
   height?: number;
+  svgRef?: React.RefObject<SVGSVGElement | null>;
 }
 
-export default function PulleyCrossSection({ params: p, geometry: geo, width = 700, height = 500 }: Props) {
+export default function PulleyCrossSection({ params: p, geometry: geo, width = 700, height = 500, svgRef }: Props) {
   const svgData = useMemo(() => {
     const totalW = geo.faceWidth + (p.bossHeight > 0 ? p.bossHeight : 0);
     const totalR = geo.outerDiameter / 2;
@@ -450,6 +451,7 @@ export default function PulleyCrossSection({ params: p, geometry: geo, width = 7
 
   return (
     <svg
+      ref={svgRef}
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
