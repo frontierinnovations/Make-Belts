@@ -619,79 +619,118 @@ export default function PulleyCanvas({ params, geometry, sectionView }: PulleyCa
       group.add(teethMesh);
     }
 
-    // ── Bore highlight ────────────────────────────
-    const boreGeo = new THREE.CylinderGeometry(
-      geo.boreDiameter / 2 - 0.1,
-      geo.boreDiameter / 2 - 0.1,
-      geo.faceWidth + p.bossHeight + 0.5,
-      64, 1, true
-    );
-    const boreMesh = new THREE.Mesh(boreGeo, boreMat);
-    group.add(boreMesh);
+    // ── Bore face disks ────────────────────────────
+    // Coordinate system after lathe rotation.x=-PI/2 and position.z=-faceWidth/2:
+    //   Pulley axis = Z, pulley spans z = -faceWidth/2 to z = +faceWidth/2
+    //   Boss (if any) extends from z = +faceWidth/2 to z = +faceWidth/2 + bossHeight
+    //   Web centre = z = 0
+    const boreR = geo.boreDiameter / 2;
+    const halfFW = geo.faceWidth / 2;
+    const boreDiskGeo = new THREE.RingGeometry(boreR - 0.5, boreR + 1.5, 64);
+    const boreDisk1 = new THREE.Mesh(boreDiskGeo, boreMat);
+    boreDisk1.rotation.x = Math.PI / 2;
+    boreDisk1.position.z = -halfFW + 0.1;
+    group.add(boreDisk1);
+    const boreDisk2 = new THREE.Mesh(boreDiskGeo.clone(), boreMat);
+    boreDisk2.rotation.x = -Math.PI / 2;
+    boreDisk2.position.z = halfFW + p.bossHeight - 0.1;
+    group.add(boreDisk2);
 
     // ── Keyway visual ─────────────────────────────
-    // Render as a dark slot cut into the bore surface (no boolean subtract in Three.js,
-    // so we draw a dark box that sits flush with the bore inner wall and extends inward)
+    // Pulley spans z = -faceWidth/2 to z = +faceWidth/2 + bossHeight
+    // Slot runs the full bore length, centred at z = bossHeight/2
     if (p.boreType === "keyway" && geo.keyway) {
       const kw = geo.keyway;
-      const boreR = geo.boreDiameter / 2;
+      const boreR2 = geo.boreDiameter / 2;
       const kwLength = geo.faceWidth + p.bossHeight + 1.0;
-      // The slot box: width = keyway width, height = hubDepth (slot depth into hub)
-      // Position: center of slot is at bore surface + hubDepth/2 (outward from bore)
-      const kwGeo = new THREE.BoxGeometry(kw.width, kw.hubDepth + 0.5, kwLength);
+      const kwCentreZ = p.bossHeight / 2; // centred between -faceWidth/2 and +faceWidth/2+bossHeight
+      const kwGeo = new THREE.BoxGeometry(kw.hubDepth + 0.5, kw.width, kwLength);
       const kwMesh = new THREE.Mesh(kwGeo, boreMat);
-      // Place slot so its inner face is flush with the bore surface
-      kwMesh.position.y = boreR + kw.hubDepth / 2;
+      kwMesh.position.x = boreR2 + kw.hubDepth / 2;
+      kwMesh.position.y = 0;
+      kwMesh.position.z = kwCentreZ;
       group.add(kwMesh);
-      // Cover the outer face of the slot with the body color so it blends into the hub
-      const kwCapGeo = new THREE.BoxGeometry(kw.width + 0.2, 0.5, kwLength);
+      const kwCapGeo = new THREE.BoxGeometry(0.5, kw.width + 0.2, kwLength);
       const kwCapMat = new THREE.MeshStandardMaterial({
         color: bodyMat.color,
         metalness: bodyMat.metalness,
         roughness: bodyMat.roughness,
       });
       const kwCapMesh = new THREE.Mesh(kwCapGeo, kwCapMat);
-      kwCapMesh.position.y = boreR + kw.hubDepth + 0.1;
+      kwCapMesh.position.x = boreR2 + kw.hubDepth + 0.1;
+      kwCapMesh.position.y = 0;
+      kwCapMesh.position.z = kwCentreZ;
       group.add(kwCapMesh);
     }
 
     // ── D-shaft flat visual ───────────────────────
-    // Render as a body-colored cap that covers the flat chord of the D-bore
+    // Pulley spans z = -faceWidth/2 to z = +faceWidth/2 + bossHeight
     if (p.boreType === "dshaft") {
-      const boreR = geo.boreDiameter / 2;
-      const flatY = boreR - p.dShaftFlatDepth; // Y position of the flat chord
-      const chordWidth = 2 * Math.sqrt(Math.max(0, boreR * boreR - flatY * flatY));
+      const boreR2 = geo.boreDiameter / 2;
+      const flatX = boreR2 - p.dShaftFlatDepth;
+      const chordWidth = 2 * Math.sqrt(Math.max(0, boreR2 * boreR2 - flatX * flatX));
       const kwLength = geo.faceWidth + p.bossHeight + 1.0;
-      // Dark flat slot
-      const flatGeo = new THREE.BoxGeometry(chordWidth, p.dShaftFlatDepth + 0.5, kwLength);
+      const kwCentreZ = p.bossHeight / 2;
+      const flatGeo = new THREE.BoxGeometry(p.dShaftFlatDepth + 0.5, chordWidth, kwLength);
       const flatMesh = new THREE.Mesh(flatGeo, boreMat);
-      flatMesh.position.y = flatY + p.dShaftFlatDepth / 2;
+      flatMesh.position.x = flatX + p.dShaftFlatDepth / 2;
+      flatMesh.position.y = 0;
+      flatMesh.position.z = kwCentreZ;
       group.add(flatMesh);
     }
 
-    // ── Spoke cutouts (visual only) ───────────────
+    // ── Spokes ────────────────────────────────────
+    // Strategy: render background-colored ring sectors between spokes to simulate
+    // open cutouts. The solid lathe web is overdrawn by background-colored sectors.
+    // Pulley axis = Z, web centre = z=0.
+    // RingGeometry lies in the XY plane by default (faces +Z), which is correct here.
     if (p.webStyle === "spokes" && p.numSpokes > 0) {
-      const spokeR = (geo.outerDiameter / 2 - geo.grooveDepth - 3 + geo.hubDiameter / 2) / 2;
-      const spokeLen = geo.outerDiameter / 2 - geo.grooveDepth - 3 - geo.hubDiameter / 2 - 4;
-      for (let i = 0; i < p.numSpokes; i++) {
-        const angle = (i / p.numSpokes) * Math.PI * 2;
-        const spokeGeo = new THREE.BoxGeometry(spokeLen, p.spokeWidth, geo.webThickness - 0.5);
-        const spokeMat = new THREE.MeshStandardMaterial({
-          color: bodyMat.color,
-          metalness: bodyMat.metalness,
-          roughness: bodyMat.roughness,
-        });
-        const spokeMesh = new THREE.Mesh(spokeGeo, spokeMat);
-        spokeMesh.position.x = Math.cos(angle) * spokeR;
-        spokeMesh.position.y = Math.sin(angle) * spokeR;
-        spokeMesh.rotation.z = angle;
-        group.add(spokeMesh);
+      const hubR = geo.hubDiameter / 2;
+      const rimR = Math.max(hubR + 8, geo.outerDiameter / 2 - geo.grooveDepth - 2);
+      const webDepth = Math.max(2, geo.webThickness);
+      const bgColor = 0x1a1a2e; // matches canvas background
+      // Angular half-width of each spoke (in radians)
+      const spokeHalfAngle = Math.atan2(p.spokeWidth / 2, (hubR + rimR) / 2);
+      const gapAngle = (Math.PI * 2 / p.numSpokes) - 2 * spokeHalfAngle;
+      if (gapAngle > 0.05) {
+        for (let i = 0; i < p.numSpokes; i++) {
+          const gapCentreAngle = (i / p.numSpokes) * Math.PI * 2 + Math.PI / p.numSpokes;
+          const startAngle = gapCentreAngle - gapAngle / 2;
+          // Front face cutout (facing +Z)
+          const frontCutGeo = new THREE.RingGeometry(hubR + 0.5, rimR - 0.5, 48, 1, startAngle, gapAngle);
+          const frontCutMat = new THREE.MeshBasicMaterial({ color: bgColor, side: THREE.FrontSide });
+          const frontCut = new THREE.Mesh(frontCutGeo, frontCutMat);
+          frontCut.position.z = webDepth / 2 + 0.1;
+          frontCut.renderOrder = 2;
+          group.add(frontCut);
+          // Back face cutout (facing -Z)
+          const backCutGeo = new THREE.RingGeometry(hubR + 0.5, rimR - 0.5, 48, 1, startAngle, gapAngle);
+          const backCutMat = new THREE.MeshBasicMaterial({ color: bgColor, side: THREE.BackSide });
+          const backCut = new THREE.Mesh(backCutGeo, backCutMat);
+          backCut.position.z = -webDepth / 2 - 0.1;
+          backCut.renderOrder = 2;
+          group.add(backCut);
+          // Side fill: a thin box at the gap centre to cover the web depth edge
+          const midR = (hubR + rimR) / 2;
+          const arcLen = midR * gapAngle;
+          const sideGeo = new THREE.BoxGeometry(arcLen * 0.9, webDepth + 0.5, 1);
+          const sideMat = new THREE.MeshBasicMaterial({ color: bgColor });
+          const sideMesh = new THREE.Mesh(sideGeo, sideMat);
+          sideMesh.position.x = Math.cos(gapCentreAngle) * midR;
+          sideMesh.position.y = Math.sin(gapCentreAngle) * midR;
+          sideMesh.position.z = 0;
+          sideMesh.rotation.z = gapCentreAngle + Math.PI / 2;
+          sideMesh.renderOrder = 2;
+          group.add(sideMesh);
+        }
       }
     }
 
     // ── Lightening holes (visual rings) ──────────
+    // Pulley axis = Z. Holes are positioned in XY plane at web Z centre.
     if (p.webStyle === "lightening" && p.numLighteningHoles > 0) {
       const pcd = geo.lighteningHolePCD / 2;
+      const webZ = 0; // pulley centred at z=0
       for (let i = 0; i < p.numLighteningHoles; i++) {
         const angle = (i / p.numLighteningHoles) * Math.PI * 2;
         const holeGeo = new THREE.CylinderGeometry(
@@ -702,17 +741,16 @@ export default function PulleyCanvas({ params, geometry, sectionView }: PulleyCa
         );
         const holeMat = new THREE.MeshStandardMaterial({ color: 0x111122 });
         const holeMesh = new THREE.Mesh(holeGeo, holeMat);
+        // CylinderGeometry default axis is Y; rotate so it aligns with Z
+        holeMesh.rotation.x = Math.PI / 2;
         holeMesh.position.x = Math.cos(angle) * pcd;
         holeMesh.position.y = Math.sin(angle) * pcd;
+        holeMesh.position.z = webZ;
         group.add(holeMesh);
       }
     }
 
-    // ── Axis line ─────────────────────────────────
-    const axisGeo = new THREE.CylinderGeometry(0.5, 0.5, geo.faceWidth + p.bossHeight + 20, 8);
-    const axisMat = new THREE.MeshBasicMaterial({ color: 0x444466 });
-    const axisMesh = new THREE.Mesh(axisGeo, axisMat);
-    group.add(axisMesh);
+    // ── Axis line removed — clutters the view ────
 
     // ── Auto-fit camera ───────────────────────────
     const maxDim = Math.max(geo.outerDiameter, geo.faceWidth + p.bossHeight);
