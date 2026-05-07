@@ -7,7 +7,7 @@
  * - Collapsible sections
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
@@ -41,6 +41,10 @@ interface NumericFieldProps {
 function NumericField({ label, value, onChange, min = 0, max = 9999, step = 1, unit, decimals = 0, tooltip }: NumericFieldProps) {
   const fmt = (v: number) => decimals > 0 ? v.toFixed(decimals) : String(Math.round(v));
 
+  // Local editing state: null = not editing, string = user is typing
+  const [editText, setEditText] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const inc = useCallback(() => {
     onChange(Math.min(max, parseFloat((value + step).toFixed(decimals + 2))));
   }, [value, step, max, onChange, decimals]);
@@ -51,6 +55,14 @@ function NumericField({ label, value, onChange, min = 0, max = 9999, step = 1, u
 
   const incBind = useRepeatButton(inc);
   const decBind = useRepeatButton(dec);
+
+  const commitEdit = useCallback((text: string) => {
+    const parsed = parseFloat(text);
+    if (!isNaN(parsed)) {
+      onChange(Math.min(max, Math.max(min, parseFloat(parsed.toFixed(decimals + 2)))));
+    }
+    setEditText(null);
+  }, [onChange, min, max, decimals]);
 
   const labelEl = tooltip ? (
     <Tooltip>
@@ -73,9 +85,32 @@ function NumericField({ label, value, onChange, min = 0, max = 9999, step = 1, u
           {...decBind}
           className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted/80 rounded-l text-sm font-mono border border-border select-none touch-manipulation"
         >−</button>
-        <div className="h-8 px-2 flex items-center justify-center bg-muted border-y border-border min-w-[56px] text-xs font-mono tabular-nums">
-          {fmt(value)}{unit && <span className="text-muted-foreground ml-0.5 text-[10px]">{unit}</span>}
-        </div>
+        {editText !== null ? (
+          <input
+            ref={inputRef}
+            type="text"
+            inputMode="decimal"
+            value={editText}
+            onChange={e => setEditText(e.target.value)}
+            onBlur={e => commitEdit(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") { commitEdit((e.target as HTMLInputElement).value); inputRef.current?.blur(); }
+              if (e.key === "Escape") { setEditText(null); }
+              if (e.key === "ArrowUp") { e.preventDefault(); inc(); setEditText(null); }
+              if (e.key === "ArrowDown") { e.preventDefault(); dec(); setEditText(null); }
+            }}
+            className="h-8 px-1 bg-background border-y border-primary text-foreground text-xs font-mono tabular-nums text-center outline-none min-w-[56px] w-[72px]"
+            autoFocus
+          />
+        ) : (
+          <button
+            onClick={() => { setEditText(fmt(value)); setTimeout(() => inputRef.current?.select(), 10); }}
+            className="h-8 px-2 flex items-center justify-center bg-muted border-y border-border min-w-[56px] text-xs font-mono tabular-nums hover:bg-muted/70 hover:border-primary/50 transition-colors cursor-text"
+            title="Click to type a value"
+          >
+            {fmt(value)}{unit && <span className="text-muted-foreground ml-0.5 text-[10px]">{unit}</span>}
+          </button>
+        )}
         <button
           {...incBind}
           className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted/80 rounded-r text-sm font-mono border border-border select-none touch-manipulation"

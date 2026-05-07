@@ -24,6 +24,7 @@ import {
   FileCode2, ZoomIn, ZoomOut, Maximize2
 } from "lucide-react";
 import PulleyCrossSection from "@/components/PulleyCrossSection";
+import PulleyFaceView from "@/components/PulleyFaceView";
 import PulleyControls from "@/components/PulleyControls";
 import { defaultPulleyParams, computePulleyGeometry } from "@/lib/pulleyMath";
 import { downloadPulleySTEP, downloadPulleyOpenSCAD } from "@/lib/pulleyStep";
@@ -33,6 +34,7 @@ export default function Pulleys() {
   const [params, setParams] = useState<PulleyParams>(defaultPulleyParams);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [zoom, setZoom] = useState(1.0);
+  const [activeView, setActiveView] = useState<"section" | "face">("section");
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ w: 700, h: 500 });
 
@@ -139,14 +141,30 @@ export default function Pulleys() {
           className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
           style={{ background: "#181b24", borderColor: "#1e2430" }}
         >
-          {/* Left: title */}
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-mono font-bold tracking-widest" style={{ color: "#4a90d9" }}>
+          {/* Left: view tabs */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveView("section")}
+              className="text-[10px] font-mono font-bold tracking-widest px-2.5 py-1 rounded transition-colors touch-manipulation"
+              style={{
+                background: activeView === "section" ? "#1a3a5c" : "transparent",
+                color: activeView === "section" ? "#4a90d9" : "#4a5568",
+                border: activeView === "section" ? "1px solid #2a5a8c" : "1px solid transparent",
+              }}
+            >
               CROSS-SECTION
-            </span>
-            <span className="text-[9px] font-mono hidden sm:inline" style={{ color: "#4a5568" }}>
-              Half-section view · ISO 4183 / RMA IP-20
-            </span>
+            </button>
+            <button
+              onClick={() => setActiveView("face")}
+              className="text-[10px] font-mono font-bold tracking-widest px-2.5 py-1 rounded transition-colors touch-manipulation"
+              style={{
+                background: activeView === "face" ? "#1a3a5c" : "transparent",
+                color: activeView === "face" ? "#4a90d9" : "#4a5568",
+                border: activeView === "face" ? "1px solid #2a5a8c" : "1px solid transparent",
+              }}
+            >
+              FACE VIEW
+            </button>
           </div>
 
           {/* Right: zoom + export */}
@@ -245,12 +263,21 @@ export default function Pulleys() {
               transition: "transform 0.15s ease",
             }}
           >
-            <PulleyCrossSection
-              params={params}
-              geometry={geometry}
-              width={Math.max(600, canvasSize.w - 40)}
-              height={Math.max(420, canvasSize.h - 40)}
-            />
+            {activeView === "section" ? (
+              <PulleyCrossSection
+                params={params}
+                geometry={geometry}
+                width={Math.max(600, canvasSize.w - 40)}
+                height={Math.max(420, canvasSize.h - 40)}
+              />
+            ) : (
+              <PulleyFaceView
+                params={params}
+                geometry={geometry}
+                width={Math.max(500, Math.min(canvasSize.w - 40, canvasSize.h - 80))}
+                height={Math.max(500, Math.min(canvasSize.w - 40, canvasSize.h - 80))}
+              />
+            )}
           </div>
         </div>
 

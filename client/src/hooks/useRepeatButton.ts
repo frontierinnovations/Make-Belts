@@ -4,8 +4,8 @@
  */
 import { useCallback, useRef } from "react";
 
-const INITIAL_DELAY = 500; // ms before repeat starts
-const REPEAT_INTERVAL = 80; // ms between repeats
+const INITIAL_DELAY = 600; // ms before repeat starts
+const REPEAT_INTERVAL = 160; // ms between repeats (was 80 — slowed for precision)
 
 export function useRepeatButton(callback: () => void) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
