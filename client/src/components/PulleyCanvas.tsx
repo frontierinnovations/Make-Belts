@@ -38,12 +38,24 @@ class SimpleOrbitControls {
     this.update();
   }
 
+  // Touch state
+  private touchStartDist = 0;
+  private touchStartRadius = 0;
+  private lastTouchX = 0;
+  private lastTouchY = 0;
+  private lastTouchMidX = 0;
+  private lastTouchMidY = 0;
+
   private addListeners() {
     this.domElement.addEventListener("mousedown", this.onMouseDown);
     this.domElement.addEventListener("mousemove", this.onMouseMove);
     this.domElement.addEventListener("mouseup", this.onMouseUp);
     this.domElement.addEventListener("wheel", this.onWheel, { passive: false });
     this.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
+    // Touch events
+    this.domElement.addEventListener("touchstart", this.onTouchStart, { passive: false });
+    this.domElement.addEventListener("touchmove", this.onTouchMove, { passive: false });
+    this.domElement.addEventListener("touchend", this.onTouchEnd);
   }
 
   dispose() {
@@ -51,7 +63,61 @@ class SimpleOrbitControls {
     this.domElement.removeEventListener("mousemove", this.onMouseMove);
     this.domElement.removeEventListener("mouseup", this.onMouseUp);
     this.domElement.removeEventListener("wheel", this.onWheel);
+    this.domElement.removeEventListener("touchstart", this.onTouchStart);
+    this.domElement.removeEventListener("touchmove", this.onTouchMove);
+    this.domElement.removeEventListener("touchend", this.onTouchEnd);
   }
+
+  private onTouchStart = (e: TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      this.lastTouchX = e.touches[0].clientX;
+      this.lastTouchY = e.touches[0].clientY;
+    } else if (e.touches.length === 2) {
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      this.touchStartDist = Math.sqrt(dx * dx + dy * dy);
+      this.touchStartRadius = this.radius;
+      this.lastTouchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      this.lastTouchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    }
+  };
+
+  private onTouchMove = (e: TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      // Single finger: rotate
+      const dx = e.touches[0].clientX - this.lastTouchX;
+      const dy = e.touches[0].clientY - this.lastTouchY;
+      this.theta -= dx * 0.007;
+      this.phi = Math.max(0.05, Math.min(Math.PI - 0.05, this.phi - dy * 0.007));
+      this.lastTouchX = e.touches[0].clientX;
+      this.lastTouchY = e.touches[0].clientY;
+      this.update();
+    } else if (e.touches.length === 2) {
+      // Two fingers: pinch to zoom + pan
+      const dx = e.touches[1].clientX - e.touches[0].clientX;
+      const dy = e.touches[1].clientY - e.touches[0].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (this.touchStartDist > 0) {
+        this.radius = Math.max(this.minRadius, Math.min(this.maxRadius,
+          this.touchStartRadius * (this.touchStartDist / dist)
+        ));
+      }
+      // Pan with midpoint
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      this.panX -= (midX - this.lastTouchMidX) * 0.15;
+      this.panY += (midY - this.lastTouchMidY) * 0.15;
+      this.lastTouchMidX = midX;
+      this.lastTouchMidY = midY;
+      this.update();
+    }
+  };
+
+  private onTouchEnd = (_e: TouchEvent) => {
+    this.touchStartDist = 0;
+  };
 
   private onMouseDown = (e: MouseEvent) => {
     if (e.button === 0) { this.isDragging = true; }

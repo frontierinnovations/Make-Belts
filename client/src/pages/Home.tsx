@@ -177,19 +177,22 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#f8f8f8]">
-      {/* Mobile sidebar toggle */}
-      <button
-        className="md:hidden fixed top-2 left-2 z-50 w-8 h-8 flex items-center justify-center bg-white border border-gray-200 rounded shadow-sm"
-        onClick={() => setMobileSidebarOpen((v) => !v)}
-      >
-        {mobileSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
-      </button>
+      {/* Mobile sidebar toggle — shown only when sidebar is closed */}
+      {!mobileSidebarOpen && (
+        <button
+          className="md:hidden fixed top-3 left-3 z-50 w-10 h-10 flex items-center justify-center bg-white border border-gray-200 rounded-lg shadow-md active:scale-95 transition-transform"
+          onClick={() => setMobileSidebarOpen(true)}
+          aria-label="Open controls"
+        >
+          <ChevronRight size={18} className="text-gray-700" />
+        </button>
+      )}
 
       {/* Sidebar */}
       <div
         className={`
-          flex-shrink-0 w-[320px] h-full overflow-hidden
-          transition-transform duration-200
+          flex-shrink-0 w-full md:w-[320px] h-full overflow-hidden
+          transition-transform duration-200 ease-in-out
           ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
           fixed md:relative z-40 md:z-auto
         `}
@@ -208,6 +211,7 @@ export default function Home() {
           onResetView={handleResetView}
           onShareConfig={handleShareConfig}
           onApplyWizard={handleApplyWizard}
+          onCloseMobile={() => setMobileSidebarOpen(false)}
           warnings={warnings}
           geo={geo}
         />

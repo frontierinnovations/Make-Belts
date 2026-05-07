@@ -69,6 +69,7 @@ import {
   ShoppingCart,
   Box,
   Zap,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import BeltWizard from "@/components/BeltWizard";
@@ -125,12 +126,13 @@ function NumericField({
   };
 
   return (
-    <div className="flex items-center gap-2 py-1">
-      <span className="text-sm text-gray-600 w-[140px] shrink-0">{label}:</span>
+    <div className="flex items-center gap-2 py-1.5">
+      <span className="text-xs text-gray-600 w-[130px] shrink-0 leading-tight">{label}:</span>
       <div className="flex items-center gap-1 flex-1">
         {editing && !isLocked ? (
           <input
             type="text"
+            inputMode="decimal"
             value={draft}
             autoFocus
             onChange={(e) => setDraft(e.target.value)}
@@ -141,7 +143,7 @@ function NumericField({
               if (e.key === "ArrowUp") { e.preventDefault(); setDraft(String(Math.round((parseFloat(draft) || value) + step) * 1000 / 1000)); }
               if (e.key === "ArrowDown") { e.preventDefault(); setDraft(String(Math.round((parseFloat(draft) || value) - step) * 1000 / 1000)); }
             }}
-            className="w-[90px] h-8 px-2 text-sm border border-blue-400 rounded text-center bg-white text-gray-800 outline-none ring-1 ring-blue-300"
+            className="w-[80px] h-9 px-2 text-sm border border-blue-400 rounded text-center bg-white text-gray-800 outline-none ring-1 ring-blue-300"
           />
         ) : (
           <input
@@ -149,7 +151,7 @@ function NumericField({
             value={`${display}${suffix ? " " + suffix : ""}`}
             readOnly
             onClick={() => { if (!isLocked) { setDraft(display); setEditing(true); } }}
-            className={`w-[90px] h-8 px-2 text-sm border rounded text-center ${
+            className={`w-[80px] h-9 px-2 text-sm border rounded text-center ${
               isLocked
                 ? "bg-gray-50 border-gray-100 text-gray-400 cursor-default"
                 : "bg-gray-100 border-gray-200 text-gray-800 hover:bg-white hover:border-blue-300 cursor-text"
@@ -163,7 +165,7 @@ function NumericField({
               onClick={decrement}
               {...decRepeat}
               disabled={disabled || value <= min}
-              className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-gray-600 disabled:opacity-40 transition-colors select-none"
+              className="w-9 h-9 flex items-center justify-center bg-gray-100 hover:bg-gray-200 active:bg-gray-300 border border-gray-200 rounded text-gray-600 disabled:opacity-40 transition-colors select-none touch-manipulation"
             >
               <Minus size={14} />
             </button>
@@ -171,7 +173,7 @@ function NumericField({
               onClick={increment}
               {...incRepeat}
               disabled={disabled || value >= max}
-              className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-gray-600 disabled:opacity-40 transition-colors select-none"
+              className="w-9 h-9 flex items-center justify-center bg-gray-100 hover:bg-gray-200 active:bg-gray-300 border border-gray-200 rounded text-gray-600 disabled:opacity-40 transition-colors select-none touch-manipulation"
             >
               <Plus size={14} />
             </button>
@@ -222,6 +224,7 @@ function SectionHeader({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface BeltControlsProps {
+  onCloseMobile?: () => void;
   driver: PulleyParams;
   driven: PulleyParams;
   system: BeltSystemParams;
@@ -253,6 +256,7 @@ export default function BeltControls({
   onToggleAnimation,
   onResetView,
   onShareConfig,
+  onCloseMobile,
   warnings,
   geo,
 }: BeltControlsProps) {
@@ -346,7 +350,7 @@ export default function BeltControls({
               </span>
             </Link>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             {errorCount > 0 && (
               <span className="flex items-center gap-0.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
                 <XCircle size={9} /> {errorCount}
@@ -361,6 +365,16 @@ export default function BeltControls({
               <span className="flex items-center gap-0.5 text-[10px] text-green-600 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">
                 <CheckCircle2 size={9} /> OK
               </span>
+            )}
+            {/* Mobile close button */}
+            {onCloseMobile && (
+              <button
+                onClick={onCloseMobile}
+                className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 active:scale-95 transition-transform ml-1"
+                aria-label="Close controls"
+              >
+                <X size={16} />
+              </button>
             )}
           </div>
         </div>

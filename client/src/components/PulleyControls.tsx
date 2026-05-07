@@ -66,19 +66,19 @@ function NumericField({ label, value, onChange, min = 0, max = 9999, step = 1, u
   );
 
   return (
-    <div className="flex items-center justify-between gap-2 py-0.5">
+    <div className="flex items-center justify-between gap-2 py-1">
       {labelEl}
       <div className="flex items-center gap-0">
         <button
           {...decBind}
-          className="w-5 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded-l text-xs font-mono border border-border select-none"
+          className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted/80 rounded-l text-sm font-mono border border-border select-none touch-manipulation"
         >−</button>
-        <div className="h-6 px-2 flex items-center justify-center bg-muted border-y border-border min-w-[52px] text-xs font-mono tabular-nums">
+        <div className="h-8 px-2 flex items-center justify-center bg-muted border-y border-border min-w-[56px] text-xs font-mono tabular-nums">
           {fmt(value)}{unit && <span className="text-muted-foreground ml-0.5 text-[10px]">{unit}</span>}
         </div>
         <button
           {...incBind}
-          className="w-5 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded-r text-xs font-mono border border-border select-none"
+          className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted/80 rounded-r text-sm font-mono border border-border select-none touch-manipulation"
         >+</button>
       </div>
     </div>
