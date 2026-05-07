@@ -630,27 +630,42 @@ export default function PulleyCanvas({ params, geometry, sectionView }: PulleyCa
     group.add(boreMesh);
 
     // ── Keyway visual ─────────────────────────────
+    // Render as a dark slot cut into the bore surface (no boolean subtract in Three.js,
+    // so we draw a dark box that sits flush with the bore inner wall and extends inward)
     if (p.boreType === "keyway" && geo.keyway) {
       const kw = geo.keyway;
-      const kwGeo = new THREE.BoxGeometry(
-        kw.width,
-        kw.hubDepth,
-        geo.faceWidth + p.bossHeight + 0.5
-      );
+      const boreR = geo.boreDiameter / 2;
+      const kwLength = geo.faceWidth + p.bossHeight + 1.0;
+      // The slot box: width = keyway width, height = hubDepth (slot depth into hub)
+      // Position: center of slot is at bore surface + hubDepth/2 (outward from bore)
+      const kwGeo = new THREE.BoxGeometry(kw.width, kw.hubDepth + 0.5, kwLength);
       const kwMesh = new THREE.Mesh(kwGeo, boreMat);
-      kwMesh.position.y = geo.boreDiameter / 2 + kw.hubDepth / 2 - 0.1;
+      // Place slot so its inner face is flush with the bore surface
+      kwMesh.position.y = boreR + kw.hubDepth / 2;
       group.add(kwMesh);
+      // Cover the outer face of the slot with the body color so it blends into the hub
+      const kwCapGeo = new THREE.BoxGeometry(kw.width + 0.2, 0.5, kwLength);
+      const kwCapMat = new THREE.MeshStandardMaterial({
+        color: bodyMat.color,
+        metalness: bodyMat.metalness,
+        roughness: bodyMat.roughness,
+      });
+      const kwCapMesh = new THREE.Mesh(kwCapGeo, kwCapMat);
+      kwCapMesh.position.y = boreR + kw.hubDepth + 0.1;
+      group.add(kwCapMesh);
     }
 
     // ── D-shaft flat visual ───────────────────────
+    // Render as a body-colored cap that covers the flat chord of the D-bore
     if (p.boreType === "dshaft") {
-      const flatGeo = new THREE.BoxGeometry(
-        geo.boreDiameter + 2,
-        p.dShaftFlatDepth,
-        geo.faceWidth + p.bossHeight + 0.5
-      );
+      const boreR = geo.boreDiameter / 2;
+      const flatY = boreR - p.dShaftFlatDepth; // Y position of the flat chord
+      const chordWidth = 2 * Math.sqrt(Math.max(0, boreR * boreR - flatY * flatY));
+      const kwLength = geo.faceWidth + p.bossHeight + 1.0;
+      // Dark flat slot
+      const flatGeo = new THREE.BoxGeometry(chordWidth, p.dShaftFlatDepth + 0.5, kwLength);
       const flatMesh = new THREE.Mesh(flatGeo, boreMat);
-      flatMesh.position.y = geo.boreDiameter / 2 - p.dShaftFlatDepth / 2 + 0.1;
+      flatMesh.position.y = flatY + p.dShaftFlatDepth / 2;
       group.add(flatMesh);
     }
 

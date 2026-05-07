@@ -24,7 +24,8 @@ import {
 } from "@/lib/beltMath";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronRight, SlidersHorizontal, Cog } from "lucide-react";
+import { Link } from "wouter";
 
 // ─── URL share config ─────────────────────────────────────────────────────────
 
@@ -177,14 +178,14 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#f8f8f8]">
-      {/* Mobile sidebar toggle — shown only when sidebar is closed */}
+      {/* Mobile FAB — bottom-right thumb zone */}
       {!mobileSidebarOpen && (
         <button
-          className="md:hidden fixed top-3 left-3 z-50 w-10 h-10 flex items-center justify-center bg-white border border-gray-200 rounded-lg shadow-md active:scale-95 transition-transform"
+          className="md:hidden fixed bottom-6 right-5 z-50 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-500 active:scale-95 transition-all shadow-lg shadow-blue-900/30 flex items-center justify-center touch-manipulation"
           onClick={() => setMobileSidebarOpen(true)}
           aria-label="Open controls"
         >
-          <ChevronRight size={18} className="text-gray-700" />
+          <SlidersHorizontal size={22} className="text-white" />
         </button>
       )}
 
@@ -220,13 +221,13 @@ export default function Home() {
       {/* Mobile overlay */}
       {mobileSidebarOpen && (
         <div
-          className="md:hidden fixed inset-0 z-30 bg-black/20"
+          className="md:hidden fixed inset-0 z-30 bg-black/40 backdrop-blur-sm"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
 
       {/* Canvas */}
-      <div className="flex-1 h-full overflow-hidden">
+      <div className="flex-1 h-full overflow-hidden relative">
         <BeltCanvas
           driver={driver}
           driven={driven}
@@ -236,6 +237,21 @@ export default function Home() {
           animating={animating}
           warnings={warnings}
         />
+
+        {/* Mobile bottom nav */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-2 border-t border-gray-200 bg-white/95 backdrop-blur-sm"
+          style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+        >
+          <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wide">
+            Belt Drive
+          </div>
+          <Link href="/pulleys">
+            <button className="flex items-center gap-1.5 text-gray-500 hover:text-gray-800 transition-colors touch-manipulation py-1 px-2 rounded active:bg-gray-100">
+              <Cog size={14} />
+              <span className="text-[10px] font-mono">PULLEYS</span>
+            </button>
+          </Link>
+        </div>
       </div>
     </div>
   );
