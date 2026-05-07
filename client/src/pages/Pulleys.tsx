@@ -1,30 +1,40 @@
 /**
  * Pulleys.tsx — Parametric Pulley Generator Page
  *
- * Design: Clean Utilitarian, matching Make-Belts/Make-Gears
- * Layout: Fixed sidebar (left) + full-height 3D canvas (right)
+ * Design: Clean Utilitarian / Engineering Drawing aesthetic
+ * Layout: Fixed sidebar (left) + 2D cross-section drawing (right)
  *
- * Mobile UX (ui-ux-pro review applied):
- * - Bottom-right FAB toggle (thumb zone, Fitts's Law)
- * - Full-width slide-in sidebar with backdrop
- * - Info overlay on canvas (OD/PD/W visible at all times)
- * - Bottom nav link to belt drive page
- * - Safe-area padding (pb-safe)
- * - Touch-manipulation on all interactive elements
+ * Primary view: accurate 2D half-section engineering drawing
+ *   Left half  = exterior profile
+ *   Right half = cut section showing bore, keyway, web, boss
+ *
+ * Export: STEP (AP203) + OpenSCAD
+ *
+ * Mobile UX:
+ *   - Bottom-right FAB toggle (thumb zone)
+ *   - Full-width slide-in sidebar with backdrop
+ *   - Bottom nav link to belt drive page
+ *   - Safe-area padding
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, SlidersHorizontal, X, Scissors } from "lucide-react";
-import PulleyCanvas from "@/components/PulleyCanvas";
+import {
+  ArrowLeft, SlidersHorizontal, X, Download,
+  FileCode2, ZoomIn, ZoomOut, Maximize2
+} from "lucide-react";
+import PulleyCrossSection from "@/components/PulleyCrossSection";
 import PulleyControls from "@/components/PulleyControls";
 import { defaultPulleyParams, computePulleyGeometry } from "@/lib/pulleyMath";
+import { downloadPulleySTEP, downloadPulleyOpenSCAD } from "@/lib/pulleyStep";
 import type { PulleyParams } from "@/lib/pulleyMath";
 
 export default function Pulleys() {
   const [params, setParams] = useState<PulleyParams>(defaultPulleyParams);
-  const [sectionView, setSectionView] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [zoom, setZoom] = useState(1.0);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ w: 700, h: 500 });
 
   const geometry = computePulleyGeometry(params);
 
@@ -32,67 +42,75 @@ export default function Pulleys() {
     setParams(prev => ({ ...prev, ...partial }));
   }, []);
 
-  const handleToggleSectionView = useCallback(() => {
-    setSectionView(v => !v);
+  // Measure canvas container size
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 100 && height > 100) {
+          setCanvasSize({ w: Math.floor(width), h: Math.floor(height) });
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
+  const handleZoomIn = () => setZoom(z => Math.min(z + 0.2, 3.0));
+  const handleZoomOut = () => setZoom(z => Math.max(z - 0.2, 0.4));
+  const handleZoomReset = () => setZoom(1.0);
+
+  const handleExportSTEP = () => downloadPulleySTEP(params, geometry);
+  const handleExportSCAD = () => downloadPulleyOpenSCAD(params, geometry);
+
   return (
-    <div className="flex h-screen bg-[#1a1a1a] text-white overflow-hidden">
+    <div className="flex h-screen overflow-hidden" style={{ background: "#0f1117", color: "#e8e8e8" }}>
 
       {/* ── Sidebar ─────────────────────────────── */}
       <div
         className={`
-          flex-shrink-0 flex flex-col border-r border-white/10 overflow-hidden
+          flex-shrink-0 flex flex-col border-r overflow-hidden
           w-full md:w-[280px]
           transition-transform duration-200 ease-in-out
           ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
           fixed md:relative z-40 md:z-auto h-full
         `}
-        style={{ background: "#1e1e1e" }}
+        style={{ background: "#13161e", borderColor: "#1e2430" }}
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 flex-shrink-0"
-          style={{ background: "#252525" }}
+          className="flex items-center justify-between px-3 py-2.5 border-b flex-shrink-0"
+          style={{ background: "#181b24", borderColor: "#1e2430" }}
         >
           <div className="flex items-center gap-2">
             <Link href="/">
-              <button className="text-white/40 hover:text-white transition-colors p-1.5 rounded active:scale-95 touch-manipulation min-w-[36px] min-h-[36px] flex items-center justify-center">
+              <button className="p-1.5 rounded transition-colors active:scale-95 touch-manipulation min-w-[36px] min-h-[36px] flex items-center justify-center"
+                style={{ color: "#607080" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#e8e8e8")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#607080")}
+              >
                 <ArrowLeft className="w-4 h-4" />
               </button>
             </Link>
             <div>
-              <div className="text-xs font-semibold text-white tracking-wide font-mono">
+              <div className="text-xs font-bold tracking-widest font-mono" style={{ color: "#4a90d9" }}>
                 MAKE-PULLEYS
               </div>
-              <div className="text-[9px] text-white/40">
+              <div className="text-[9px] font-mono" style={{ color: "#4a5568" }}>
                 Parametric Pulley Generator
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            {/* Section view toggle */}
-            <button
-              onClick={handleToggleSectionView}
-              className={`flex items-center gap-1 text-[9px] px-2 py-1.5 rounded border transition-colors font-mono touch-manipulation min-h-[32px] ${
-                sectionView
-                  ? "border-blue-500 text-blue-400 bg-blue-500/10"
-                  : "border-white/20 text-white/40 hover:border-white/40"
-              }`}
-              title="Toggle section view"
-            >
-              <Scissors size={10} />
-              <span className="hidden sm:inline">{sectionView ? "SECTION ✓" : "SECTION"}</span>
-            </button>
-            {/* Mobile close button */}
-            <button
-              onClick={() => setMobileSidebarOpen(false)}
-              className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-white/40 hover:text-white hover:bg-white/10 active:scale-95 transition-all touch-manipulation"
-              aria-label="Close controls"
-            >
-              <X size={18} />
-            </button>
-          </div>
+          {/* Mobile close */}
+          <button
+            onClick={() => setMobileSidebarOpen(false)}
+            className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg transition-all active:scale-95 touch-manipulation"
+            style={{ color: "#607080" }}
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Controls */}
@@ -100,8 +118,8 @@ export default function Pulleys() {
           params={params}
           geometry={geometry}
           onChange={handleChange}
-          sectionView={sectionView}
-          onToggleSectionView={handleToggleSectionView}
+          sectionView={false}
+          onToggleSectionView={() => {}}
         />
       </div>
 
@@ -113,98 +131,192 @@ export default function Pulleys() {
         />
       )}
 
-      {/* ── 3D Canvas ───────────────────────────── */}
-      <div className="flex-1 relative overflow-hidden">
-        <PulleyCanvas
-          params={params}
-          geometry={geometry}
-          sectionView={sectionView}
-        />
+      {/* ── Main canvas area ─────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
-        {/* ── Top-left: back link on desktop ────── */}
-        <div className="hidden md:flex absolute top-3 left-3 z-10">
-          {/* intentionally empty on desktop — sidebar has back button */}
+        {/* ── Top toolbar ── */}
+        <div
+          className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
+          style={{ background: "#181b24", borderColor: "#1e2430" }}
+        >
+          {/* Left: title */}
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono font-bold tracking-widest" style={{ color: "#4a90d9" }}>
+              CROSS-SECTION
+            </span>
+            <span className="text-[9px] font-mono hidden sm:inline" style={{ color: "#4a5568" }}>
+              Half-section view · ISO 4183 / RMA IP-20
+            </span>
+          </div>
+
+          {/* Right: zoom + export */}
+          <div className="flex items-center gap-2">
+            {/* Zoom controls */}
+            <div className="flex items-center gap-1 border rounded px-1.5 py-1" style={{ borderColor: "#1e2430" }}>
+              <button onClick={handleZoomOut} className="p-0.5 rounded transition-colors touch-manipulation"
+                style={{ color: "#607080" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#e8e8e8")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#607080")}
+              >
+                <ZoomOut size={13} />
+              </button>
+              <button onClick={handleZoomReset} className="text-[9px] font-mono px-1.5 rounded transition-colors touch-manipulation"
+                style={{ color: "#a0b8c8" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#e8e8e8")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#a0b8c8")}
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button onClick={handleZoomIn} className="p-0.5 rounded transition-colors touch-manipulation"
+                style={{ color: "#607080" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#e8e8e8")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#607080")}
+              >
+                <ZoomIn size={13} />
+              </button>
+            </div>
+
+            {/* Export STEP */}
+            <button
+              onClick={handleExportSTEP}
+              disabled={geometry.errors.length > 0}
+              className="flex items-center gap-1.5 text-[10px] font-mono px-3 py-1.5 rounded border transition-all active:scale-95 touch-manipulation disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: geometry.errors.length > 0 ? "transparent" : "#1a3a5c",
+                borderColor: "#2a5a8c",
+                color: "#4a90d9",
+              }}
+              onMouseEnter={e => { if (geometry.errors.length === 0) e.currentTarget.style.background = "#1e4a74"; }}
+              onMouseLeave={e => { if (geometry.errors.length === 0) e.currentTarget.style.background = "#1a3a5c"; }}
+              title="Export STEP AP203 file for CAD import"
+            >
+              <Download size={12} />
+              <span className="hidden sm:inline">STEP</span>
+            </button>
+
+            {/* Export OpenSCAD */}
+            <button
+              onClick={handleExportSCAD}
+              disabled={geometry.errors.length > 0}
+              className="flex items-center gap-1.5 text-[10px] font-mono px-3 py-1.5 rounded border transition-all active:scale-95 touch-manipulation disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: "transparent",
+                borderColor: "#1e2430",
+                color: "#607080",
+              }}
+              onMouseEnter={e => { if (geometry.errors.length === 0) { e.currentTarget.style.borderColor = "#2a3444"; e.currentTarget.style.color = "#a0b8c8"; } }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e2430"; e.currentTarget.style.color = "#607080"; }}
+              title="Export OpenSCAD script"
+            >
+              <FileCode2 size={12} />
+              <span className="hidden sm:inline">SCAD</span>
+            </button>
+          </div>
         </div>
 
-        {/* ── Errors / warnings overlay ─────────── */}
+        {/* ── Errors / warnings ── */}
         {(geometry.errors.length > 0 || geometry.warnings.length > 0) && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 space-y-1 w-[90%] max-w-sm pointer-events-none">
+          <div className="flex-shrink-0 px-4 py-1.5 space-y-1 border-b" style={{ borderColor: "#1e2430" }}>
             {geometry.errors.map((e, i) => (
-              <div
-                key={`e${i}`}
-                className="bg-red-900/90 border border-red-500/60 text-red-200 text-[10px] px-3 py-1.5 rounded font-mono text-center"
-              >
+              <div key={`e${i}`} className="text-[10px] font-mono px-3 py-1.5 rounded border"
+                style={{ background: "#2a1010", borderColor: "#7a2020", color: "#f08080" }}>
                 ⚠ {e}
               </div>
             ))}
             {geometry.errors.length === 0 && geometry.warnings.map((w, i) => (
-              <div
-                key={`w${i}`}
-                className="bg-yellow-900/80 border border-yellow-500/50 text-yellow-200 text-[10px] px-3 py-1.5 rounded font-mono text-center"
-              >
+              <div key={`w${i}`} className="text-[10px] font-mono px-3 py-1.5 rounded border"
+                style={{ background: "#2a1e08", borderColor: "#7a5010", color: "#f0b060" }}>
                 ⚠ {w}
               </div>
             ))}
           </div>
         )}
 
-        {/* ── Info overlay — always visible ─────── */}
-        {/* Desktop: bottom-right */}
-        <div className="hidden sm:block absolute bottom-4 right-4 text-[9px] text-white/40 font-mono space-y-0.5 text-right pointer-events-none">
-          <div className="text-white/60 font-semibold text-[10px]">
-            {params.grooveType.toUpperCase()} · {params.material}
-          </div>
-          <div>OD: {geometry.outerDiameter.toFixed(1)} mm</div>
-          <div>PD: {geometry.pitchDiameter.toFixed(1)} mm</div>
-          <div>W: {geometry.faceWidth.toFixed(1)} mm</div>
-          <div>Hub Ø: {geometry.hubDiameter.toFixed(1)} mm</div>
-          <div className="text-white/20 mt-1">Drag · Scroll · Right-drag</div>
-        </div>
-
-        {/* Mobile: top-right compact badge */}
-        <div className="sm:hidden absolute top-3 right-3 z-10 pointer-events-none">
-          <div className="bg-black/60 backdrop-blur-sm border border-white/10 rounded-lg px-2.5 py-1.5 text-[9px] font-mono text-white/60 space-y-0.5">
-            <div className="text-white/80 font-semibold text-[10px]">
-              {params.grooveType.toUpperCase()} · {params.material}
-            </div>
-            <div>OD {geometry.outerDiameter.toFixed(1)} · PD {geometry.pitchDiameter.toFixed(1)} · W {geometry.faceWidth.toFixed(1)} mm</div>
-          </div>
-        </div>
-
-        {/* ── Mobile FAB — bottom-right (thumb zone) */}
-        <button
-          className="md:hidden fixed bottom-6 right-5 z-50 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-500 active:scale-95 transition-all shadow-lg shadow-blue-900/50 flex items-center justify-center touch-manipulation"
-          onClick={() => setMobileSidebarOpen(true)}
-          aria-label="Open controls"
-          style={{ display: mobileSidebarOpen ? "none" : undefined }}
+        {/* ── Drawing canvas ── */}
+        <div
+          ref={canvasRef}
+          className="flex-1 overflow-auto flex items-center justify-center"
+          style={{ background: "#0a0d12" }}
         >
-          <SlidersHorizontal size={22} className="text-white" />
-        </button>
+          <div
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: "center center",
+              transition: "transform 0.15s ease",
+            }}
+          >
+            <PulleyCrossSection
+              params={params}
+              geometry={geometry}
+              width={Math.max(600, canvasSize.w - 40)}
+              height={Math.max(420, canvasSize.h - 40)}
+            />
+          </div>
+        </div>
 
-        {/* ── Mobile bottom nav ─────────────────── */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-2 border-t border-white/10 bg-[#1e1e1e]/95 backdrop-blur-sm"
-          style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+        {/* ── Status bar ── */}
+        <div
+          className="flex-shrink-0 flex items-center justify-between px-4 py-1.5 border-t"
+          style={{ background: "#181b24", borderColor: "#1e2430" }}
+        >
+          <div className="flex items-center gap-4 text-[9px] font-mono" style={{ color: "#4a5568" }}>
+            <span>OD <span style={{ color: "#a0b8c8" }}>{geometry.outerDiameter.toFixed(1)} mm</span></span>
+            <span>PD <span style={{ color: "#f0a040" }}>{geometry.pitchDiameter.toFixed(1)} mm</span></span>
+            <span>W <span style={{ color: "#a0b8c8" }}>{geometry.faceWidth.toFixed(1)} mm</span></span>
+            <span>Bore <span style={{ color: "#a0b8c8" }}>Ø{geometry.boreDiameter.toFixed(1)} mm</span></span>
+            <span className="hidden sm:inline">
+              ~<span style={{ color: "#a0b8c8" }}>{geometry.estimatedMass.toFixed(1)} g</span>
+            </span>
+          </div>
+          <div className="text-[9px] font-mono" style={{ color: "#2a3444" }}>
+            {params.material} · Make-Pulleys v1.0
+          </div>
+        </div>
+
+        {/* ── Mobile bottom nav ── */}
+        <div
+          className="md:hidden flex-shrink-0 flex items-center justify-between px-4 py-2 border-t"
+          style={{
+            background: "#181b24",
+            borderColor: "#1e2430",
+            paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))"
+          }}
         >
           <Link href="/">
-            <button className="flex items-center gap-1.5 text-white/50 hover:text-white transition-colors touch-manipulation py-1 px-2 rounded active:bg-white/10">
+            <button className="flex items-center gap-1.5 text-[10px] font-mono py-1 px-2 rounded active:bg-white/10 touch-manipulation"
+              style={{ color: "#607080" }}>
               <ArrowLeft size={14} />
-              <span className="text-[10px] font-mono">BELT DRIVE</span>
+              BELT DRIVE
             </button>
           </Link>
-          <div className="text-[9px] font-mono text-white/30">
+          <div className="text-[9px] font-mono" style={{ color: "#2a3444" }}>
             {params.grooveType.toUpperCase()} PULLEY
           </div>
           <button
-            onClick={handleToggleSectionView}
-            className={`flex items-center gap-1 text-[10px] font-mono touch-manipulation py-1 px-2 rounded transition-colors ${
-              sectionView ? "text-blue-400" : "text-white/50 hover:text-white"
-            }`}
+            onClick={handleExportSTEP}
+            disabled={geometry.errors.length > 0}
+            className="flex items-center gap-1 text-[10px] font-mono py-1 px-2 rounded touch-manipulation disabled:opacity-40"
+            style={{ color: "#4a90d9" }}
           >
-            <Scissors size={12} />
-            <span>SECTION</span>
+            <Download size={12} />
+            STEP
           </button>
         </div>
       </div>
+
+      {/* ── Mobile FAB ── */}
+      <button
+        className="md:hidden fixed bottom-16 right-5 z-50 w-14 h-14 rounded-full active:scale-95 transition-all shadow-lg flex items-center justify-center touch-manipulation"
+        style={{
+          background: "#1a3a5c",
+          boxShadow: "0 4px 20px rgba(74,144,217,0.3)",
+          display: mobileSidebarOpen ? "none" : undefined
+        }}
+        onClick={() => setMobileSidebarOpen(true)}
+        aria-label="Open controls"
+      >
+        <SlidersHorizontal size={22} style={{ color: "#4a90d9" }} />
+      </button>
     </div>
   );
 }
